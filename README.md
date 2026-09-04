@@ -208,6 +208,10 @@ It also states which parts are enforced by a gate and which are only habit,
 because a checklist presented as a control is the same category of error as a
 green result standing in for a measurement.
 
+What is left to build, in order and with the reasoning, is in
+[`docs/ROADMAP.md`](docs/ROADMAP.md). Review points are items in that list
+rather than something remembered at the end.
+
 ## Roadmap
 
 - `build` and dependency-vulnerability gates

@@ -154,16 +154,23 @@ fi
 fi  # end sections 2-5
 
 # --- 6. relative links resolve ---------------------------------------------
-links=()
-gate_lines links bash -c "grep -ohE '\\]\\([^)#][^)]*\\)' \"\$@\" | tr -d ']()' | sort -u" _ "${docs[@]}"
-for l in "${links[@]:-}"; do
-    [ -n "$l" ] || continue
-    case "$l" in http*|mailto:*|'#'*) continue ;; esac
-    claims=$(( claims + 1 ))
-    if [ ! -e "$l" ]; then
-        gate_finding "dead-relative-link"
-        report "relative link does not resolve: $l"
-    fi
+# Resolved relative to the file that contains the link, not to the repository
+# root. The first version globbed every markdown file together and checked the
+# targets from the root, so a correct link from docs/ to a sibling was reported
+# as dead -- the gate was wrong about the one thing it was added to check.
+for doc in "${docs[@]}"; do
+    docdir="$(dirname "$doc")"
+    links=()
+    gate_lines links bash -c "grep -ohE '\\]\\([^)#][^)]*\\)' \"\$1\" | tr -d ']()' | sort -u" _ "$doc"
+    for l in "${links[@]:-}"; do
+        [ -n "$l" ] || continue
+        case "$l" in http*|mailto:*|'#'*) continue ;; esac
+        claims=$(( claims + 1 ))
+        if [ ! -e "$docdir/$l" ]; then
+            gate_finding "dead-relative-link"
+            report "relative link does not resolve: $l (from $doc)"
+        fi
+    done
 done
 
 gate_note "checked $claims claims across ${#docs[@]} markdown file(s)"
