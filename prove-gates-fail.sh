@@ -41,6 +41,24 @@ trap 'chmod -R u+rwX "$WORK" 2>/dev/null; rm -rf "$WORK"' EXIT
 PASS=0; FAIL=0
 ROWS=()
 
+# Declared minimum denominators for this fixture. See fixtures/*.floors.
+declare -A FLOOR=()
+FLOOR_FILE="$ROOT/fixtures/$(basename "$TARGET").floors"
+if [ -f "$FLOOR_FILE" ]; then
+    while IFS='=' read -r _g _n; do
+        case "$_g" in ''|\#*) continue ;; esac
+        FLOOR["$_g"]="$_n"
+    done < "$FLOOR_FILE"
+else
+    printf 'no floor file at %s -- scope reduction cannot be detected for this fixture\n' "$FLOOR_FILE" >&2
+    exit 2
+fi
+
+# report_scanned <dir> <gate> ; echoes the denominator, or "null"
+report_scanned() {
+    jq -r '.scanned // "null"' "$1/.gate-reports/$2.json" 2>/dev/null || echo "null"
+}
+
 record() { ROWS+=("$1|$2|$3|$4|$5|${6:-}"); }
 
 run_gate_in() {
@@ -83,14 +101,31 @@ for g in "$ROOT"/gates/*.sh; do
     # fixture. Accepting only 0 would force every gate to be relevant to every
     # repository, which is how a linter ends up reporting a pass on a language
     # it never looked at.
-    if [ "$rc" -eq 0 ] || [ "$rc" -eq 3 ]; then
-        label="quiet on clean input (exit 0)"
-        [ "$rc" -eq 3 ] && label="not applicable to this fixture (exit 3)"
-        printf '  OK    %-18s %s\n' "$name" "$label"
-        record "clean:$name" "-" "0 or 3" "$rc" "ok" "no fault injected; the gate must stay silent or declare itself not applicable"; PASS=$((PASS+1))
-    else
+    floor="${FLOOR[$name]:-}"
+    if [ -z "$floor" ]; then
+        printf '  BAD   %-18s no floor declared in %s -- a gate with no floor opts itself out of scope-reduction detection\n' \
+            "$name" "$(basename "$FLOOR_FILE")"
+        record "clean:$name" "-" "floor" "-" "MISMATCH" "gate has no declared minimum denominator"; FAIL=$((FAIL+1))
+        continue
+    fi
+    scanned="$(report_scanned "$dir" "$name")"
+    if [ "$rc" -eq 3 ]; then
+        # The floor declares the gate applies here. Declaring itself irrelevant
+        # to a fixture it is expected to examine is a scope reduction wearing a
+        # different exit code.
+        printf '  BAD   %-18s reported NOT APPLICABLE, but %s declares a floor of %s\n' \
+            "$name" "$(basename "$FLOOR_FILE")" "$floor"
+        record "clean:$name" "-" ">=$floor" "n/a (exit 3)" "MISMATCH" "gate declared itself not applicable to a fixture it is expected to examine"; FAIL=$((FAIL+1))
+    elif [ "$rc" -ne 0 ]; then
         printf '  BAD   %-18s fired on clean input (exit %s) -- gate does not discriminate\n' "$name" "$rc"
-        record "clean:$name" "-" "0 or 3" "$rc" "MISMATCH" "no fault injected; the gate must stay silent or declare itself not applicable"; FAIL=$((FAIL+1))
+        record "clean:$name" "-" "0" "$rc" "MISMATCH" "no fault injected; the gate must stay silent"; FAIL=$((FAIL+1))
+    elif [ "$scanned" = "null" ] || [ "$scanned" -lt "$floor" ]; then
+        printf '  BAD   %-18s scanned %s, floor is %s -- the gate is examining less than it used to\n' \
+            "$name" "$scanned" "$floor"
+        record "clean:$name" "-" ">=$floor" "$scanned" "MISMATCH" "denominator fell below the declared floor"; FAIL=$((FAIL+1))
+    else
+        printf '  OK    %-18s quiet on clean input, scanned %s (floor %s)\n' "$name" "$scanned" "$floor"
+        record "clean:$name" "-" ">=$floor" "$scanned" "ok" "no fault injected; the gate must stay silent and examine at least its declared floor"; PASS=$((PASS+1))
     fi
 done
 
@@ -103,7 +138,7 @@ _digest_before="$(_code_digest)"
 printf '\n=== direction 2: every declared fault must be CAUGHT ===\n'
 for f in "$ROOT"/faults/*/; do
     id="$(basename "$f")"
-    GATE=""; EXPECT_EXIT=""; EXPECT_RULE=""; SELFTEST=""; DESCRIPTION=""
+    GATE=""; EXPECT_EXIT=""; EXPECT_RULE=""; SELFTEST=""; DESCRIPTION=""; EXPECT_SCANNED_MIN=""; report_note=""
     # fault.env is read, not sourced into this shell.
     #
     # `source` ran repository content with the harness's own functions in
@@ -122,11 +157,12 @@ for f in "$ROOT"/faults/*/; do
             EXPECT_RULE) EXPECT_RULE="$_v" ;;
             SELFTEST)    SELFTEST="$_v" ;;
             DESCRIPTION) DESCRIPTION="$_v" ;;
+            EXPECT_SCANNED_MIN) EXPECT_SCANNED_MIN="$_v" ;;
         esac
     done < <(env -i bash --noprofile --norc -c '
         set -euo pipefail
         . "$1" >/dev/null 2>&1 || exit 1
-        for k in GATE EXPECT_EXIT EXPECT_RULE SELFTEST DESCRIPTION; do
+        for k in GATE EXPECT_EXIT EXPECT_RULE SELFTEST DESCRIPTION EXPECT_SCANNED_MIN; do
             printf "%s=%s\n" "$k" "${!k:-}"
         done' _ "$f/fault.env")
     [ -n "$GATE" ] || { printf '  BAD   %-18s fault.env declares no GATE\n' "$id"; FAIL=$((FAIL+1)); continue; }
@@ -140,6 +176,11 @@ for f in "$ROOT"/faults/*/; do
     verdict="ok"
     if [ "$rc" -ne "$EXPECT_EXIT" ]; then
         verdict="MISMATCH"
+    elif [ -n "$EXPECT_SCANNED_MIN" ] && {
+             s="$(report_scanned "$dir" "$GATE")"
+             [ "$s" = "null" ] || [ "$s" -lt "$EXPECT_SCANNED_MIN" ]; }; then
+        verdict="MISMATCH"
+        report_note="scanned $(report_scanned "$dir" "$GATE"), expected at least $EXPECT_SCANNED_MIN"
     elif [ -n "$EXPECT_RULE" ]; then
         if ! jq -e --arg r "$EXPECT_RULE" '.rules | index($r)' "$report" >/dev/null 2>&1; then
             verdict="MISMATCH"
@@ -164,6 +205,7 @@ for f in "$ROOT"/faults/*/; do
     else
         printf '  BAD   %-18s expected exit %s%s, got exit %s\n' \
             "$id" "$EXPECT_EXIT" "${EXPECT_RULE:+ rule $EXPECT_RULE}" "$rc"
+        [ -n "$report_note" ] && printf '        %s\n' "$report_note"
         printf '        this fault exists because: %s\n' "$DESCRIPTION"
         [ -f "$report" ] && printf '        report: %s\n' "$(jq -c '{status,exit_code,findings,rules,scanned}' "$report")"
         record "$id" "$GATE" "$EXPECT_EXIT" "$rc" "MISMATCH" "$DESCRIPTION"; FAIL=$((FAIL+1))

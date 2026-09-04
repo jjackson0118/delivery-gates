@@ -109,6 +109,29 @@ gitleaks 8.30.1 ships no AWS-specific rule that matches a bare `AKIA`
 identifier. The expected rule had been written from memory rather than from
 observation. Right answer, wrong reason, and only the rule assertion caught it.
 
+### Declared denominators
+
+`fixtures/<name>.floors` records the minimum each gate must report against a
+fixture, and the harness fails when one drops below it. A gate with no entry is
+an error rather than a skip — adding a gate and forgetting its floor would
+otherwise opt it out of the only check that looks at scope. An entry also
+declares the gate *applies*, so returning exit 3 there contradicts the
+declaration and fails.
+
+The denominator has to be a byproduct of the work rather than a parallel
+calculation, or the floor measures the wrong thing. `secrets` used to count
+commits with `git rev-list` while the scan range came from somewhere else:
+narrowing the range to one commit left the count reporting ten. It now takes
+the number from what gitleaks reports having scanned, and the floor catches the
+narrowing.
+
+**What this does not catch**, measured rather than assumed — five mutations
+were run after the floors landed and one went red. A floor sees shrinkage it
+can see. It does not see a gate that counts correctly and then hands the tool
+fewer files, a reduction the fixture is too thin to expose, inflation, or a
+semantic swap that produces the same number on this fixture. Those want faults
+or a richer fixture, and both are on the [roadmap](docs/ROADMAP.md).
+
 ### Who tests the harness
 
 - `faults/_control-noop` injects nothing and must come back clean. Anything red

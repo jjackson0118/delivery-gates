@@ -92,6 +92,7 @@ else
 fi
 
 REPORT="$(mktemp)"
+SCANLOG="$(mktemp)"; gate_cleanup "$SCANLOG"
 gate_expect_failure_begin
 "$BIN_DIR/gitleaks" git \
     --redact \
@@ -100,7 +101,7 @@ gate_expect_failure_begin
     --log-opts="$LOG_OPTS" \
     --report-format json \
     --report-path "$REPORT" \
-    . 2>/dev/null
+    . 2>"$SCANLOG"
 rc=$?
 gate_expect_failure_end
 
@@ -122,6 +123,20 @@ if [ -s "$REPORT" ]; then
 fi
 rm -f "$REPORT"
 
-gate_note "mode=$MODE range=$LOG_OPTS"
-gate_scanned "$scanned"
+# The denominator comes from what gitleaks reports having scanned, not from a
+# separate `git rev-list` that never sees LOG_OPTS. Computed independently they
+# can disagree silently: narrowing the range to a single commit left the count
+# reporting ten, so the gate claimed ten commits examined having examined one.
+actually_scanned="$(grep -oE '[0-9]+ commits scanned' "$SCANLOG" | grep -oE '^[0-9]+' | tail -1)"
+if [ -z "$actually_scanned" ]; then
+    gate_error "gitleaks did not report how many commits it scanned -- the denominator cannot be established from the scanner's own work"
+fi
+# Deliberately not asserted equal to the requested range. gitleaks scans diffs,
+# so it legitimately reports fewer than `git rev-list` counts whenever the range
+# contains an empty commit -- this fixture has one, and a strict equality check
+# failed on it immediately. The scanner's own count is the honest denominator
+# because it is the work; the declared floor in fixtures/*.floors is what
+# catches a range that has been quietly narrowed.
+gate_note "$(printf 'mode=%s range=%s requested=%s scanned=%s' "$MODE" "$LOG_OPTS" "$scanned" "$actually_scanned")"
+gate_scanned "$actually_scanned"
 gate_finish

@@ -69,9 +69,25 @@ if [ "${#files[@]}" -eq 0 ]; then
     gate_not_applicable "no shell files in this repository"
 fi
 
+# The file list is materialised once and used for BOTH the invocation and the
+# denominator. Previously `scanned` was ${#files[@]} while the invocation
+# expanded "${files[@]}" separately: changing the invocation to analyse fewer
+# files left the count untouched, so the gate reported examining twenty-one
+# files having examined one. A floor cannot catch that -- the number is still
+# large and still rising. Binding both to one artifact can.
+LIST="$(mktemp)"; gate_cleanup "$LIST"
+printf '%s\n' "${files[@]}" > "$LIST"
+mapfile -t analysed < "$LIST"
+
+# Both the invocation and the denominator read back from $LIST, so they cannot
+# drift apart: analysing fewer files requires writing fewer, which lowers the
+# count. Deliberately not xargs -- xargs reports 123 when its command exits
+# non-zero, which turns shellcheck's exit 1 (findings) into a code the gate
+# correctly rejects as "the analyser failed to run". The first version of this
+# fix did exactly that, and the fault corpus caught it.
 REPORT="$(mktemp)"
 gate_expect_failure_begin
-"$BIN_DIR/shellcheck" --severity="$SEVERITY" --format=json1 "${files[@]}" > "$REPORT" 2>/dev/null
+"$BIN_DIR/shellcheck" --severity="$SEVERITY" --format=json1 "${analysed[@]}" > "$REPORT" 2>/dev/null
 rc=$?
 gate_expect_failure_end
 
@@ -99,5 +115,5 @@ done
 
 rm -f "$REPORT"
 gate_note "severity>=$SEVERITY"
-gate_scanned "${#files[@]}"
+gate_scanned "$(wc -l < "$LIST")"
 gate_finish
