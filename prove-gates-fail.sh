@@ -34,7 +34,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGET="${1:?usage: prove-gates-fail.sh <path-to-target-repo>}"
 TARGET="$(cd "$TARGET" && pwd)"
 WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
+# chmod first: a fault that plants an unreadable directory would otherwise
+# leave the scratch tree undeletable.
+trap 'chmod -R u+rwX "$WORK" 2>/dev/null; rm -rf "$WORK"' EXIT
 
 PASS=0; FAIL=0
 ROWS=()
@@ -43,17 +45,32 @@ record() { ROWS+=("$1|$2|$3|$4|$5|${6:-}"); }
 
 run_gate_in() {
     # run_gate_in <dir> <gate> ; echoes exit code, leaves report in <dir>/.gate-reports
-    local dir="$1" gate="$2" rc=0
+    #
+    # A gate named "_synthetic" is built by the fault itself, at
+    # .synthetic/gate.sh. Some defects live in the contract library rather than
+    # in any repository under test -- an unbound variable, an unwritable report
+    # directory, a bad denominator -- and cannot be expressed by injecting a
+    # source defect into a fixture. Those faults ship a minimal gate instead.
+    local dir="$1" gate="$2" rc=0 script
+    if [ "$gate" = "_synthetic" ]; then
+        script="$dir/.synthetic/gate.sh"
+    else
+        script="$ROOT/gates/$gate.sh"
+    fi
     ( cd "$dir" && GATE_REPORT_DIR="$dir/.gate-reports" \
         GATE_BIN_DIR="${GATE_BIN_DIR:-$WORK/bin}" \
         GATE_SECRETS_MODE=history \
-        "$ROOT/gates/$gate.sh" . >/dev/null 2>&1 ) || rc=$?
+        GATE_LIB="$ROOT/lib/gate.sh" \
+        "$script" . >/dev/null 2>&1 ) || rc=$?
     echo "$rc"
 }
 
 scratch() {
     local dest="$WORK/$1"
     cp -a "$TARGET" "$dest"
+    # A fixture with reports from a manual run would hand every fault a stale
+    # verdict to read as current.
+    rm -rf "$dest/.gate-reports"
     echo "$dest"
 }
 

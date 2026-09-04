@@ -48,7 +48,7 @@ a real incident: a supervisor killed and restarted a service nine times
 overnight on nodes where its prerequisites could never be satisfied. The service
 was not unhealthy. It was not applicable, and nothing could express that.
 
-Honest caveat: exit 3 is the one code with **no proving fault**. It is reachable
+Honest caveat: exit 3 is still the one code with **no proving fault**. It is reachable
 only from `shellcheck`, and only against a repository with no shell files at all
 — the JVM fixture has `gradlew`, which the gate finds by shebang. The other gates
 treat a missing build file as `gate_error`, so pointing this suite at a non-JVM
@@ -72,6 +72,11 @@ $ ./prove-gates-fail.sh ../dora-loop
   OK    shellcheck         quiet on clean input (exit 0)
 
 === direction 2: every declared fault must be CAUGHT ===
+  OK    contract-bad-denominator caught by _synthetic (exit 2)
+  OK    contract-broken-enumeration caught by shellcheck (exit 2)
+  OK    contract-open-expect-region caught by _synthetic (exit 2)
+  OK    contract-unset-variable caught by _synthetic (exit 2)
+  OK    contract-unwritable-reports caught by shellcheck (exit 2)
   OK    _control-noop      caught by secrets (exit 0)
   OK    gate-crashes-midway caught by gradle-wrapper (exit 2)
   OK    secrets-aws-key    caught by secrets (exit 1, rule generic-api-key)
@@ -82,7 +87,7 @@ $ ./prove-gates-fail.sh ../dora-loop
   OK    test-failing-assertion caught by jvm-test (exit 1, rule test-failure)
   OK    wrapper-tampered-jar caught by gradle-wrapper (exit 1, rule wrapper-jar-checksum-mismatch)
 
-=== result: 13 proven, 0 mismatched ===
+=== result: 18 proven, 0 mismatched ===
 ```
 
 Both directions are required. A gate never observed refusing anything is not

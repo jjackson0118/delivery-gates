@@ -21,9 +21,12 @@
 # test, so a change to the launcher scripts is a reviewable diff rather than a
 # silent substitution.
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(CDPATH= cd -P -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/gate.sh
-source "$SCRIPT_DIR/../lib/gate.sh"
+source "$SCRIPT_DIR/../lib/gate.sh" || {
+    printf 'FATAL: cannot load the gate contract from %s\n' "$SCRIPT_DIR/../lib/gate.sh" >&2
+    exit 2
+}
 
 gate_init "gradle-wrapper" "wrapper files"
 gate_tool "sha256sum + services.gradle.org checksum API"

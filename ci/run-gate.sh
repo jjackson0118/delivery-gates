@@ -25,6 +25,32 @@ annotate() {
     if [ -n "${GITHUB_ACTIONS:-}" ]; then printf '::%s::%s\n' "$1" "$2"; else printf '[%s] %s\n' "$1" "$2"; fi
 }
 
+# A signal death is not a contract violation. Reporting it as one sends the
+# reader after the wrong bug: a cancelled job, an OOM kill and a broken gate
+# look identical unless the adapter names them.
+case "$rc" in
+    13[0-9]|14[0-3])
+        annotate error "gate ${name}: killed by signal $((rc-128)) -- did not complete"
+        exit 1
+        ;;
+esac
+
+# Trusting the exit code alone is the practice this repository argues against,
+# and it is what let a crashed gate report a verdict with no artifact behind it.
+report="${GATE_REPORT_DIR:-.gate-reports}/${name}.json"
+case "$rc" in
+    0|1|3)
+        if [ ! -s "$report" ]; then
+            annotate error "gate ${name}: exited ${rc} but wrote no report -- treating as could-not-run"
+            exit 1
+        fi
+        if command -v jq >/dev/null 2>&1 && ! jq -e . "$report" >/dev/null 2>&1; then
+            annotate error "gate ${name}: report is not valid JSON -- treating as could-not-run"
+            exit 1
+        fi
+        ;;
+esac
+
 case "$rc" in
     0)
         annotate notice "gate ${name}: pass"

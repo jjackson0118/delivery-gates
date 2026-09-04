@@ -31,9 +31,12 @@
 # it does not verify the original. That is trust on first use, and calling it
 # verification would overstate it.
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(CDPATH= cd -P -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/gate.sh
-source "$SCRIPT_DIR/../lib/gate.sh"
+source "$SCRIPT_DIR/../lib/gate.sh" || {
+    printf 'FATAL: cannot load the gate contract from %s\n' "$SCRIPT_DIR/../lib/gate.sh" >&2
+    exit 2
+}
 
 GITLEAKS_VERSION="8.30.1"
 GITLEAKS_SHA256="551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
@@ -107,9 +110,14 @@ if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
 fi
 
 if [ -s "$REPORT" ]; then
-    while read -r rule; do
+    # Via gate_lines, not `< <(...)`. Process substitution runs the producer in
+    # a subshell whose exit status the parent discards: a jq failure here used
+    # to drop every finding on the floor and let the gate report PASS while
+    # holding detected secrets.
+    gate_lines _rules bash -c 'jq -r ".[].RuleID" "$1" | sort -u' _ "$REPORT"
+    for rule in "${_rules[@]:-}"; do
         if [ -n "$rule" ]; then gate_finding "$rule"; fi
-    done < <(jq -r '.[].RuleID' "$REPORT" 2>/dev/null | sort -u)
+    done
 fi
 rm -f "$REPORT"
 
