@@ -40,7 +40,10 @@
 #   against that file, never against log text. Grepping logs for "failed" is the
 #   same class of mistake as trusting an exit code alone.
 
-set -euo pipefail
+# -E so the ERR trap is inherited by functions and subshells. Without it the
+# trap installed in gate_init does not fire inside a function, which is where
+# most of a gate's work happens.
+set -eEuo pipefail
 
 GATE_REPORT_DIR="${GATE_REPORT_DIR:-.gate-reports}"
 
@@ -61,12 +64,41 @@ _json_escape() {
     printf '%s' "$s"
 }
 
+# Any command failing outside an explicit check lands here.
+#
+# Without this, `set -e` aborts the gate mid-flight: the process exits with
+# whatever code the failing command returned and no report is written. A gate
+# whose scanner crashed then exits 1 -- indistinguishable from a gate that
+# found something -- which is the exact confusion the 1/2 split exists to
+# prevent, occurring in the file that defines the split.
+_gate_on_err() {
+    local rc=$1 line=$2
+    trap - ERR
+    gate_error "unexpected failure at line $line (exit $rc) -- the gate did not complete"
+}
+
+# A scanner reporting findings exits non-zero, and that is data rather than an
+# error. `set +e` alone does not help: the ERR trap fires on a failing command
+# regardless of errexit, because errexit controls whether the shell exits, not
+# whether the trap runs. So an intentional-failure region has to suspend the
+# trap explicitly, and say so.
+gate_expect_failure_begin() {
+    trap - ERR
+    set +e
+}
+
+gate_expect_failure_end() {
+    set -e
+    trap '_gate_on_err $? $LINENO' ERR
+}
+
 # gate_init <name> <scanned-unit>
 gate_init() {
     _GATE_NAME="$1"
     _GATE_UNIT="$2"
     _GATE_START=$(date +%s)
     mkdir -p "$GATE_REPORT_DIR"
+    trap '_gate_on_err $? $LINENO' ERR
     printf ':: gate %s starting\n' "$_GATE_NAME" >&2
 }
 
@@ -88,12 +120,12 @@ _gate_write_report() {
     local status="$1" exit_code="$2"
     local rules_json="" r
     for r in "${_GATE_RULES[@]:-}"; do
-        [ -z "$r" ] && continue
-        [ -n "$rules_json" ] && rules_json+=","
+        if [ -z "$r" ]; then continue; fi
+        if [ -n "$rules_json" ]; then rules_json+=","; fi
         rules_json+="\"$(_json_escape "$r")\""
     done
     local scanned_json="$_GATE_SCANNED"
-    [ "$scanned_json" = "unset" ] && scanned_json="null"
+    if [ "$scanned_json" = "unset" ]; then scanned_json="null"; fi
     cat > "$GATE_REPORT_DIR/$_GATE_NAME.json" <<JSONEOF
 {
   "gate": "$(_json_escape "$_GATE_NAME")",
@@ -123,6 +155,7 @@ gate_not_applicable() {
 
 # gate_error <message>  -- the gate could not do its job. Exits 2.
 gate_error() {
+    trap - ERR
     gate_note "$1"
     _gate_write_report "error" 2
     printf ':: gate %s ERROR: %s\n' "$_GATE_NAME" "$1" >&2

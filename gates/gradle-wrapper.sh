@@ -68,7 +68,7 @@ fi
 EXPECTED=".gates/wrapper-checksums.txt"
 if [ -f "$EXPECTED" ]; then
     while read -r want file; do
-        [ -z "${want:-}" ] && continue
+        if [ -z "${want:-}" ]; then continue; fi
         case "$want" in \#*) continue ;; esac
         [ -f "$file" ] || { gate_finding "launcher-missing:$file"; continue; }
         scanned=$(( scanned + 1 ))

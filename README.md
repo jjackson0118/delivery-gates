@@ -1,6 +1,6 @@
 # delivery-gates
 
-CI/CD gates as scripts, wrapped for GitHub Actions and Jenkins — and a harness
+CI/CD gates as portable scripts, wrapped for GitHub Actions — and a harness
 that proves each one fires.
 
 ## The idea
@@ -13,7 +13,6 @@ CI platform is a thin wrapper over them:
 gates/secrets.sh  <-- the gate
       ^      ^
       |      +---- .github/workflows/  (GitHub Actions calls it)
-      |      +---- jenkins/Jenkinsfile (Jenkins calls it)
       +----------- prove-gates-fail.sh (the harness calls the same script)
 ```
 
@@ -21,6 +20,10 @@ If a gate is only expressible in workflow YAML, it isn't a gate — it's a
 feature of one CI vendor. Scripts port; YAML doesn't. It also means the proof
 exercises the real gate rather than a copy of it, which is the difference
 between evidence and theatre.
+
+A Jenkins wrapper is on the roadmap and **not built yet**. Portability is a
+property of the design; a second orchestrator is not something this repository
+can demonstrate today.
 
 ## The contract
 
@@ -45,6 +48,12 @@ a real incident: a supervisor killed and restarted a service nine times
 overnight on nodes where its prerequisites could never be satisfied. The service
 was not unhealthy. It was not applicable, and nothing could express that.
 
+Honest caveat: exit 3 is the one code with **no proving fault**. It is reachable
+only from `shellcheck`, and only against a repository with no shell files at all
+— the JVM fixture has `gradlew`, which the gate finds by shebang. The other gates
+treat a missing build file as `gate_error`, so pointing this suite at a non-JVM
+repository still produces exit 2 where exit 3 would be more honest.
+
 **Every gate must declare what it examined.** A gate that examined nothing
 exits `2`, never `0`. Most tools produce identical output for an empty scan and
 a clean scan; treating those the same is how a check reports PASS for weeks
@@ -56,19 +65,24 @@ assert against the report rather than grepping logs.
 
 ```
 $ ./prove-gates-fail.sh ../dora-loop
-
 === direction 1: every gate must be QUIET on a clean tree ===
   OK    gradle-wrapper     quiet on clean input (exit 0)
+  OK    jvm-test           quiet on clean input (exit 0)
   OK    secrets            quiet on clean input (exit 0)
+  OK    shellcheck         quiet on clean input (exit 0)
 
 === direction 2: every declared fault must be CAUGHT ===
   OK    _control-noop      caught by secrets (exit 0)
+  OK    gate-crashes-midway caught by gradle-wrapper (exit 2)
   OK    secrets-aws-key    caught by secrets (exit 1, rule generic-api-key)
   OK    secrets-private-key caught by secrets (exit 1, rule private-key)
   OK    _selftest-phantom  harness correctly reported NOT CAUGHT for an uninjected fault
+  OK    shellcheck-unquoted-var caught by shellcheck (exit 1, rule SC2164)
+  OK    test-empty-suite   caught by jvm-test (exit 2)
+  OK    test-failing-assertion caught by jvm-test (exit 1, rule test-failure)
   OK    wrapper-tampered-jar caught by gradle-wrapper (exit 1, rule wrapper-jar-checksum-mismatch)
 
-=== result: 7 proven, 0 mismatched ===
+=== result: 13 proven, 0 mismatched ===
 ```
 
 Both directions are required. A gate never observed refusing anything is not
@@ -144,11 +158,13 @@ it the one check here that could not be run locally, could not be run by
 Jenkins, and could not be exercised by `prove-gates-fail`. The check watching
 every other script was the only one with no proof that it fires.
 
-**`secrets`** — gitleaks, checksum-pinned, `--redact` always. Diff mode blocks;
-history mode reports on a schedule and does not block, because a history scan
-never goes green again once it finds something, and gating merges on it turns
-into an allowlist nobody reads. Its output is a rotation list, not a merge
-decision.
+**`secrets`** — gitleaks, checksum-pinned, `--redact` always. Diff mode blocks and
+is what the pipeline runs. History mode is implemented in the gate but is **not
+yet wired to a scheduled workflow** — its only caller today is the fault harness.
+The intended split, once wired: history reports and does not block, because a
+history scan never goes green again once it finds something, and gating merges
+on it turns into an allowlist nobody reads. Its output is a rotation list, not a
+merge decision.
 
 The scanner is fetched over the network and then decides whether the build
 ships, so it is checksum-pinned. Noted honestly in the source: gitleaks
@@ -159,9 +175,10 @@ overstate it.
 
 ## Roadmap
 
-- `build`, `test`, and dependency-vulnerability gates
-- Reusable `workflow_call` workflow, versioned and released, consumed by
-  [`dora-loop`](https://github.com/jjackson0118/dora-loop)
+- `build` and dependency-vulnerability gates
+- Tag and release the reusable workflow, so `gates-ref` can pin a version rather
+  than a moving branch (the workflow exists and is consumed by
+  [`dora-loop`](https://github.com/jjackson0118/dora-loop))
 - Jenkins wrapper via JCasC + Compose — the same gates, a second orchestrator
 - AI failure triage: classify a red build as product defect / flaky test /
   infrastructure / gate misconfiguration, evaluated against a fixture corpus.

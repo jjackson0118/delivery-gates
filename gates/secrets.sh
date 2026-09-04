@@ -89,7 +89,7 @@ else
 fi
 
 REPORT="$(mktemp)"
-set +e
+gate_expect_failure_begin
 "$BIN_DIR/gitleaks" git \
     --redact \
     --no-banner \
@@ -99,7 +99,7 @@ set +e
     --report-path "$REPORT" \
     . 2>/dev/null
 rc=$?
-set -e
+gate_expect_failure_end
 
 # gitleaks: 0 = clean, 1 = leaks found, anything else = it did not run properly
 if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
@@ -108,7 +108,7 @@ fi
 
 if [ -s "$REPORT" ]; then
     while read -r rule; do
-        [ -n "$rule" ] && gate_finding "$rule"
+        if [ -n "$rule" ]; then gate_finding "$rule"; fi
     done < <(jq -r '.[].RuleID' "$REPORT" 2>/dev/null | sort -u)
 fi
 rm -f "$REPORT"

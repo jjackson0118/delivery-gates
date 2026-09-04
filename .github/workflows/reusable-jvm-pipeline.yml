@@ -78,12 +78,16 @@ jobs:
       - name: Gate -- jvm tests
         run: .delivery-gates/gates/jvm-test.sh .
 
-      # Consumers get shell linting of their own scripts for free. The gate
-      # errors rather than passes if a repository has no shell files, so a
-      # consumer that has none will surface that rather than report coverage
-      # it does not have.
+      # Consumers get shell linting of their own scripts. The gate returns
+      # exit 3 (not applicable) rather than 0 on a repository with no shell
+      # files, so a consumer that has none surfaces that instead of reporting
+      # coverage it does not have.
+      #
+      # No continue-on-error. It was set here initially, which made this the one
+      # gate in the pipeline that physically could not fail a build -- a gate
+      # that cannot fail, in a repository whose central argument is that such a
+      # gate is worse than none because it reads as coverage.
       - name: Gate -- shellcheck
-        continue-on-error: true
         run: .delivery-gates/gates/shellcheck.sh .
 
       # Reports are the interface. A caller that greps logs for "failed" is

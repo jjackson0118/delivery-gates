@@ -62,10 +62,10 @@ if [ "${#files[@]}" -eq 0 ]; then
 fi
 
 REPORT="$(mktemp)"
-set +e
+gate_expect_failure_begin
 "$BIN_DIR/shellcheck" --severity="$SEVERITY" --format=json1 "${files[@]}" > "$REPORT" 2>/dev/null
 rc=$?
-set -e
+gate_expect_failure_end
 
 # Exit 1 means findings. Anything higher means the analyser did not run.
 # (This comment deliberately does not begin with the tool's name: a comment
@@ -78,11 +78,11 @@ if [ "$rc" -gt 1 ]; then
 fi
 
 while read -r code; do
-    [ -n "$code" ] && gate_finding "SC$code"
+    if [ -n "$code" ]; then gate_finding "SC$code"; fi
 done < <(jq -r '.comments[]?.code' "$REPORT" 2>/dev/null)
 
 while read -r line; do
-    [ -n "$line" ] && printf '   %s\n' "$line" >&2
+    if [ -n "$line" ]; then printf '   %s\n' "$line" >&2; fi
 done < <(jq -r '.comments[]? | "\(.file):\(.line) SC\(.code) \(.message)"' "$REPORT" 2>/dev/null)
 
 rm -f "$REPORT"
