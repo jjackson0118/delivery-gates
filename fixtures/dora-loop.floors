@@ -47,6 +47,10 @@
 
 gradle-wrapper=4
 jvm-test=25
-secrets=8
+# 7, not 8: the runner reported 8 where this host reports 9. gitleaks counts
+# commits carrying a diff, and a fresh clone need not agree exactly with a
+# long-lived working copy. A floor set at the observed value has no margin and
+# becomes a flaky check, which is worse than a loose one.
+secrets=7
 shellcheck=1
 docs=1

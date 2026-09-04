@@ -1,0 +1,29 @@
+# This repository as a fixture for its own gates.
+#
+# Added because one fixture was not enough. dora-loop has no gates/ directory,
+# so the docs gate's structural sections -- gate documented, fault named in
+# prose, exit-code table, proof-count drift -- never executed against it. It
+# checked 1 claim there and checks 27 here. A coverage analysis deleted all four
+# sections and the corpus stayed green.
+#
+# n/a is a declaration, not an omission. There is no JVM build here, so the two
+# JVM gates must return exit 3; saying so explicitly keeps "a gate with no entry
+# is an error" intact, and catches the opposite drift too -- a gate that starts
+# examining a fixture it was declared irrelevant to.
+
+gradle-wrapper=n/a
+jvm-test=n/a
+# 10, calibrated from a FRESH CLONE rather than from a working copy.
+#
+# Set at 15 initially, from this host, where `git rev-list --all` reported 25.
+# CI reported 13 and the floor failed. The gap was not the shallow clone -- that
+# was a separate defect fixed in the same change -- it was six stale
+# refs/remotes/origin/* entries for branches deleted on GitHub that a local
+# fetch had never pruned. The floor had quietly encoded one developer's ref
+# debris.
+#
+# A floor is a claim about what a gate should see. Calibrate it where the gate
+# actually runs: `git clone` to a temp dir and measure there.
+secrets=10
+shellcheck=20
+docs=20

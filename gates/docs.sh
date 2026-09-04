@@ -135,12 +135,19 @@ if grep -qE '[0-9]+ proven, [0-9]+ mismatched' README.md 2>/dev/null; then
     claims=$(( claims + 1 ))
     stated_p=$(grep -oE '[0-9]+ proven' README.md | head -1 | grep -oE '[0-9]+')
     stated_m=$(grep -oE '[0-9]+ mismatched' README.md | head -1 | grep -oE '[0-9]+')
+    # One row per gate per fixture in direction 1, plus one per fault in
+    # direction 2. The fixture count was implicit at 1 until the harness took
+    # more than one, and this check went red on the change that introduced the
+    # second -- correctly: the formula encoded an assumption that had stopped
+    # being true, which is the drift it exists to find.
     n_gates=$(find gates -maxdepth 1 -name '*.sh' | wc -l)
     n_faults=$(find faults -maxdepth 1 -mindepth 1 -type d | wc -l)
-    expected=$(( n_gates + n_faults ))
+    n_fixtures=$(find fixtures -maxdepth 1 -name '*.floors' 2>/dev/null | wc -l)
+    [ "$n_fixtures" -eq 0 ] && n_fixtures=1
+    expected=$(( n_gates * n_fixtures + n_faults ))
     if [ "$stated_p" != "$expected" ]; then
         gate_finding "proof-count-drift"
-        report "README claims $stated_p proven; $n_gates gates + $n_faults faults = $expected"
+        report "README claims $stated_p proven; $n_gates gates x $n_fixtures fixtures + $n_faults faults = $expected"
     fi
     if [ "$stated_m" != "0" ]; then
         gate_finding "proof-count-mismatched-nonzero"
