@@ -49,7 +49,7 @@ require_cmd jq
 require_cmd curl
 require_cmd sha256sum
 
-cd "$TARGET"
+cd "$TARGET" || gate_error "cannot enter $TARGET"
 git rev-parse --git-dir >/dev/null 2>&1 || gate_error "$TARGET is not a git repository"
 
 # --- provision the scanner --------------------------------------------------

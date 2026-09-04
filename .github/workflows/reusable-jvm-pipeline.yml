@@ -1,0 +1,103 @@
+# The paved road.
+#
+# Consumer repositories call this instead of writing their own gate steps, so a
+# gate improvement reaches every consumer through a version bump rather than
+# through N copy-pasted edits. That is the difference between a platform team
+# and a team that wrote a pipeline once.
+#
+# Every gate here is gates/<name>.sh in this repository. This workflow provides
+# a runner, a checkout and an artifact upload; it does not implement a single
+# check. If a gate were expressed in this YAML it could not be run by Jenkins,
+# could not be run locally, and could not be exercised by prove-gates-fail --
+# which would prove a copy rather than the gate.
+name: jvm-pipeline
+
+on:
+  workflow_call:
+    inputs:
+      java-version:
+        description: JDK to build against
+        type: string
+        default: "21"
+      gates-ref:
+        description: >-
+          Ref of delivery-gates to run. Pin to a tag in production so a change
+          to the gates cannot alter a consumer's verdict without a deliberate
+          version bump.
+        type: string
+        default: main
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the consumer repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history. A shallow clone gives the secret gate a single merge
+          # commit to look at, which it would scan, pass, and report as
+          # coverage. The gate declares its commit count so a truncated range
+          # shows up as a number rather than as silence -- but not fetching the
+          # history in the first place is the cheaper fix.
+          fetch-depth: 0
+
+      - name: Check out the gates
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: jjackson0118/delivery-gates
+          ref: ${{ inputs.gates-ref }}
+          path: .delivery-gates
+
+      - name: Set up JDK ${{ inputs.java-version }}
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.java-version }}
+
+      # Runs Gradle wrapper validation itself. The standalone gate below is not
+      # redundant with it: an implicit control is not an auditable one, and the
+      # gate also covers gradlew/gradlew.bat and distributionSha256Sum, which
+      # this action does not.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Gate -- gradle wrapper integrity
+        run: .delivery-gates/gates/gradle-wrapper.sh .
+
+      - name: Gate -- secrets
+        env:
+          GATE_SECRETS_MODE: diff
+          GATE_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: .delivery-gates/gates/secrets.sh .
+
+      - name: Gate -- jvm tests
+        run: .delivery-gates/gates/jvm-test.sh .
+
+      # Reports are the interface. A caller that greps logs for "failed" is
+      # making the same mistake as a caller that trusts an exit code alone.
+      - name: Publish gate reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: gate-reports
+          path: .gate-reports/
+          if-no-files-found: error
+
+      - name: Summarise
+        if: always()
+        run: |
+          {
+            echo "## Gate reports"
+            echo
+            echo "| gate | status | findings | scanned |"
+            echo "|---|---|---|---|"
+            for f in .gate-reports/*.json; do
+              [ -e "$f" ] || continue
+              jq -r '"| \(.gate) | \(.status) | \(.findings) | \(.scanned) \(.scanned_unit) |"' "$f"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"

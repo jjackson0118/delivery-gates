@@ -29,7 +29,7 @@ gate_init "gradle-wrapper" "wrapper files"
 gate_tool "sha256sum + services.gradle.org checksum API"
 
 TARGET="${1:-.}"
-cd "$TARGET"
+cd "$TARGET" || gate_error "cannot enter $TARGET"
 
 JAR="gradle/wrapper/gradle-wrapper.jar"
 PROPS="gradle/wrapper/gradle-wrapper.properties"

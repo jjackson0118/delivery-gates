@@ -81,6 +81,25 @@ observation. Right answer, wrong reason, and only the rule assertion caught it.
   *required* to report a mismatch for it. If this harness ever reports "caught"
   for a fault that was never applied, every other row is worthless.
 
+## Using it
+
+A consumer repository calls the reusable workflow rather than copying gate
+steps:
+
+```yaml
+jobs:
+  pipeline:
+    uses: jjackson0118/delivery-gates/.github/workflows/reusable-jvm-pipeline.yml@main
+    with:
+      java-version: "21"
+      gates-ref: main   # pin to a tag in production
+```
+
+A gate improvement then reaches every consumer through a version bump instead
+of N copy-pasted edits. Pinning `gates-ref` matters for the same reason: a
+change to the gates should not be able to alter a consumer's verdict without a
+deliberate bump.
+
 ## Gates
 
 **`gradle-wrapper`** — `gradle-wrapper.jar` is ~43 KB of opaque bytecode,
@@ -91,6 +110,16 @@ jar against Gradle's published checksums, *and* `gradlew`/`gradlew.bat`, which
 Gradle publishes no checksums for and which run first, *and* that
 `distributionSha256Sum` is set — because validating the launcher says nothing
 about the distribution the launcher then downloads.
+
+**`jvm-test`** — runs the suite and asserts it executed something. "BUILD
+SUCCESSFUL" is printed when the test task was `UP-TO-DATE` and never ran, when
+the source set is empty and the task reports `NO-SOURCE`, and when the suite
+genuinely passed — three very different situations, one output. So the gate
+reads the JUnit XML and counts rather than trusting the build's exit code, and
+zero executed tests is an **error**, not a pass. It also fails if the build
+result and the test results disagree, because then neither should be believed.
+The `test-empty-suite` fault deletes every test: Gradle reports success and the
+gate returns exit 2.
 
 **`secrets`** — gitleaks, checksum-pinned, `--redact` always. Diff mode blocks;
 history mode reports on a schedule and does not block, because a history scan

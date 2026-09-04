@@ -1,0 +1,21 @@
+# Lints the gates themselves. A gate with a shell bug is a gate that cannot be
+# trusted to fail correctly.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: shellcheck
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          shellcheck --severity=warning lib/*.sh gates/*.sh prove-gates-fail.sh faults/*/inject.sh

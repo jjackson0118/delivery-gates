@@ -39,7 +39,7 @@ trap 'rm -rf "$WORK"' EXIT
 PASS=0; FAIL=0
 ROWS=()
 
-record() { ROWS+=("$1|$2|$3|$4|$5"); }
+record() { ROWS+=("$1|$2|$3|$4|$5|${6:-}"); }
 
 run_gate_in() {
     # run_gate_in <dir> <gate> ; echoes exit code, leaves report in <dir>/.gate-reports
@@ -64,10 +64,10 @@ for g in "$ROOT"/gates/*.sh; do
     rc="$(run_gate_in "$dir" "$name")"
     if [ "$rc" -eq 0 ]; then
         printf '  OK    %-18s quiet on clean input (exit 0)\n' "$name"
-        record "clean:$name" "-" "0" "$rc" "ok"; PASS=$((PASS+1))
+        record "clean:$name" "-" "0" "$rc" "ok" "no fault injected; the gate must stay silent"; PASS=$((PASS+1))
     else
         printf '  BAD   %-18s fired on clean input (exit %s) -- gate does not discriminate\n' "$name" "$rc"
-        record "clean:$name" "-" "0" "$rc" "MISMATCH"; FAIL=$((FAIL+1))
+        record "clean:$name" "-" "0" "$rc" "MISMATCH" "no fault injected; the gate must stay silent"; FAIL=$((FAIL+1))
     fi
 done
 
@@ -97,22 +97,23 @@ for f in "$ROOT"/faults/*/; do
         # inverted: this fault exists to prove the harness can say "not caught"
         if [ "$verdict" = "MISMATCH" ]; then
             printf '  OK    %-18s harness correctly reported NOT CAUGHT for an uninjected fault\n' "$id"
-            record "$id" "$GATE" "$EXPECT_EXIT" "$rc" "ok (inverted)"; PASS=$((PASS+1))
+            record "$id" "$GATE" "$EXPECT_EXIT" "$rc" "ok (inverted)" "$DESCRIPTION"; PASS=$((PASS+1))
         else
             printf '  BAD   %-18s harness claimed CAUGHT for a fault it never injected -- the harness is lying\n' "$id"
-            record "$id" "$GATE" "$EXPECT_EXIT" "$rc" "HARNESS LIED"; FAIL=$((FAIL+1))
+            record "$id" "$GATE" "$EXPECT_EXIT" "$rc" "HARNESS LIED" "$DESCRIPTION"; FAIL=$((FAIL+1))
         fi
         continue
     fi
 
     if [ "$verdict" = "ok" ]; then
         printf '  OK    %-18s caught by %s (exit %s%s)\n' "$id" "$GATE" "$rc" "${EXPECT_RULE:+, rule $EXPECT_RULE}"
-        record "$id" "$GATE" "$EXPECT_EXIT" "$rc" "ok"; PASS=$((PASS+1))
+        record "$id" "$GATE" "$EXPECT_EXIT" "$rc" "ok" "$DESCRIPTION"; PASS=$((PASS+1))
     else
         printf '  BAD   %-18s expected exit %s%s, got exit %s\n' \
             "$id" "$EXPECT_EXIT" "${EXPECT_RULE:+ rule $EXPECT_RULE}" "$rc"
+        printf '        this fault exists because: %s\n' "$DESCRIPTION"
         [ -f "$report" ] && printf '        report: %s\n' "$(jq -c '{status,exit_code,findings,rules,scanned}' "$report")"
-        record "$id" "$GATE" "$EXPECT_EXIT" "$rc" "MISMATCH"; FAIL=$((FAIL+1))
+        record "$id" "$GATE" "$EXPECT_EXIT" "$rc" "MISMATCH" "$DESCRIPTION"; FAIL=$((FAIL+1))
     fi
 done
 
@@ -126,7 +127,16 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
         echo
         echo "| case | gate | expected exit | actual | verdict |"
         echo "|---|---|---|---|---|"
-        for r in "${ROWS[@]}"; do IFS='|' read -r a b c d e <<<"$r"; echo "| $a | $b | $c | $d | $e |"; done
+        for r in "${ROWS[@]}"; do IFS='|' read -r a b c d e _ <<<"$r"; echo "| $a | $b | $c | $d | $e |"; done
+        echo
+        echo "<details><summary>What each case is for</summary>"
+        echo
+        for r in "${ROWS[@]}"; do
+            IFS='|' read -r a _ _ _ _ f <<<"$r"
+            [ -n "$f" ] && echo "- **$a** -- $f"
+        done
+        echo
+        echo "</details>"
         echo
         echo "**$PASS proven, $FAIL mismatched.**"
     } >> "$GITHUB_STEP_SUMMARY"
