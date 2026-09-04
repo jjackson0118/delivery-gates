@@ -37,7 +37,12 @@ cd "$TARGET" || gate_error "cannot enter $TARGET"
 JAR="gradle/wrapper/gradle-wrapper.jar"
 PROPS="gradle/wrapper/gradle-wrapper.properties"
 
-[ -f "$JAR" ]   || gate_error "no $JAR -- nothing to verify, and a build that needs one"
+if [ ! -f "$JAR" ]; then
+    if compgen -G 'build.gradle*' >/dev/null || compgen -G 'settings.gradle*' >/dev/null; then
+        gate_error "a Gradle build is declared here but $JAR is missing -- nothing to verify, and a build that needs one"
+    fi
+    gate_not_applicable "no Gradle build in this repository"
+fi
 [ -f "$PROPS" ] || gate_error "no $PROPS"
 
 require_cmd sha256sum

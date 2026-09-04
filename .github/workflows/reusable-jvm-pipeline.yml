@@ -90,6 +90,11 @@ jobs:
       - name: Gate -- shellcheck
         run: .delivery-gates/ci/run-gate.sh .delivery-gates/gates/shellcheck.sh .
 
+      # Returns exit 3 on a repository with no markdown, and skips the sections
+      # describing delivery-gates' own structure when consumed elsewhere.
+      - name: Gate -- docs
+        run: .delivery-gates/ci/run-gate.sh .delivery-gates/gates/docs.sh .
+
       # Reports are the interface. A caller that greps logs for "failed" is
       # making the same mistake as a caller that trusts an exit code alone.
       #

@@ -48,11 +48,14 @@ a real incident: a supervisor killed and restarted a service nine times
 overnight on nodes where its prerequisites could never be satisfied. The service
 was not unhealthy. It was not applicable, and nothing could express that.
 
-Honest caveat: exit 3 is still the one code with **no proving fault**. It is reachable
-only from `shellcheck`, and only against a repository with no shell files at all
-— the JVM fixture has `gradlew`, which the gate finds by shebang. The other gates
-treat a missing build file as `gate_error`, so pointing this suite at a non-JVM
-repository still produces exit 2 where exit 3 would be more honest.
+Exit 3 is now proven by `faults/contract-not-applicable`, which strips every
+JVM build declaration from the fixture. It was the last code in the contract
+with more prose than proof — reachable only from `shellcheck`, and never
+exercised. The JVM gates used to return `gate_error` for a missing build file,
+so pointing this suite at a non-JVM repository produced exit 2 where exit 3 was
+the honest answer. They now distinguish the two by whether a build file
+declares intent: no `build.gradle` and no `pom.xml` means this is not a JVM
+project; a build file with no wrapper means one that is missing its wrapper.
 
 **Every gate must declare what it examined.** A gate that examined nothing
 exits `2`, never `0`. Most tools produce identical output for an empty scan and
@@ -66,6 +69,7 @@ assert against the report rather than grepping logs.
 ```
 $ ./prove-gates-fail.sh ../dora-loop
 === direction 1: every gate must be QUIET on a clean tree ===
+  OK    docs               quiet on clean input (exit 0)
   OK    gradle-wrapper     quiet on clean input (exit 0)
   OK    jvm-test           quiet on clean input (exit 0)
   OK    secrets            quiet on clean input (exit 0)
@@ -74,10 +78,12 @@ $ ./prove-gates-fail.sh ../dora-loop
 === direction 2: every declared fault must be CAUGHT ===
   OK    contract-bad-denominator caught by _synthetic (exit 2)
   OK    contract-broken-enumeration caught by shellcheck (exit 2)
+  OK    contract-not-applicable caught by jvm-test (exit 3)
   OK    contract-open-expect-region caught by _synthetic (exit 2)
   OK    contract-unset-variable caught by _synthetic (exit 2)
   OK    contract-unwritable-reports caught by shellcheck (exit 2)
   OK    _control-noop      caught by secrets (exit 0)
+  OK    docs-broken-citation caught by docs (exit 1, rule citation-missing-file)
   OK    gate-crashes-midway caught by gradle-wrapper (exit 2)
   OK    secrets-aws-key    caught by secrets (exit 1, rule generic-api-key)
   OK    secrets-private-key caught by secrets (exit 1, rule private-key)
@@ -87,7 +93,7 @@ $ ./prove-gates-fail.sh ../dora-loop
   OK    test-failing-assertion caught by jvm-test (exit 1, rule test-failure)
   OK    wrapper-tampered-jar caught by gradle-wrapper (exit 1, rule wrapper-jar-checksum-mismatch)
 
-=== result: 18 proven, 0 mismatched ===
+=== result: 21 proven, 0 mismatched ===
 ```
 
 Both directions are required. A gate never observed refusing anything is not
@@ -163,6 +169,19 @@ it the one check here that could not be run locally, could not be run by
 Jenkins, and could not be exercised by `prove-gates-fail`. The check watching
 every other script was the only one with no proof that it fires.
 
+**`docs`** — checks documentation against the code it describes. Source
+citations resolve to a real file and a real line; every gate is documented and
+every documented gate exists; every fault named in prose is present; the
+exit-code table matches what `lib/gate.sh` implements; the claimed proof count
+equals gates + faults; relative links resolve.
+
+Only the mechanical half. Whether a paragraph is *true* still needs a reader —
+but "does this line exist" and "does this number match the corpus" are
+decidable, and those were most of what an adversarial review found. This
+README once claimed 7 proven against an actual 13; nothing compared the number
+to anything. It does now. Sections that describe this repository's own
+structure are skipped on a consumer repo, which has markdown but no `gates/`.
+
 **`secrets`** — gitleaks, checksum-pinned, `--redact` always. Diff mode blocks and
 is what the pipeline runs. History mode is implemented in the gate but is **not
 yet wired to a scheduled workflow** — its only caller today is the fault harness.
@@ -177,6 +196,17 @@ publishes no checksums file for its release archives, so that pin was captured
 by hand from one download. It detects a later substitution; it does not verify
 the original. That is trust on first use, and calling it verification would
 overstate it.
+
+## Reviewing changes
+
+One maintainer, AI-assisted, no second human — so the review process is written
+down rather than assumed: [`docs/REVIEW.md`](docs/REVIEW.md). It covers the
+adversarial pass required before any change to the contract library, and four
+checklist rules, each earned by a specific failure in this repository's history.
+
+It also states which parts are enforced by a gate and which are only habit,
+because a checklist presented as a control is the same category of error as a
+green result standing in for a measurement.
 
 ## Roadmap
 
