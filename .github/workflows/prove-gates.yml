@@ -38,6 +38,13 @@ jobs:
     steps:
       - name: Check out the gates
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history. This repository is now a fixture for its own gates,
+          # and the default shallow clone gave the secret scanner exactly one
+          # commit -- caught on the runner by the declared floor, as
+          # "scanned 1, floor is 15". The vacuity rule could not catch it,
+          # because 1 is not 0. That is the whole reason a floor exists.
+          fetch-depth: 0
 
       # A real consumer, used as the fixture. Proving the gates against a toy
       # tree would prove they work on a toy tree.
