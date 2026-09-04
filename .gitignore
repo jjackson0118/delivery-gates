@@ -1,0 +1,4 @@
+.gate-reports/
+.work/
+*.log
+backups/*.tar.gz
