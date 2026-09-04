@@ -27,7 +27,15 @@ gate_init "jvm-test" "tests"
 TARGET="${1:-.}"
 cd "$TARGET" || gate_error "cannot enter $TARGET"
 
-[ -x ./gradlew ] || gate_error "no ./gradlew in $TARGET"
+if [ ! -x ./gradlew ]; then
+    # A build file declares intent. Without one this is not a JVM project and
+    # the gate does not apply; with one, the wrapper is genuinely missing.
+    if compgen -G 'build.gradle*' >/dev/null || compgen -G 'pom.xml' >/dev/null \
+       || compgen -G 'settings.gradle*' >/dev/null; then
+        gate_error "a Gradle build is declared here but ./gradlew is missing or not executable"
+    fi
+    gate_not_applicable "no JVM build in this repository"
+fi
 require_cmd python3
 
 gate_tool "gradle wrapper ($(sed -n 's|.*gradle-\([0-9.]*\)-bin\.zip.*|\1|p' gradle/wrapper/gradle-wrapper.properties | head -1))"
