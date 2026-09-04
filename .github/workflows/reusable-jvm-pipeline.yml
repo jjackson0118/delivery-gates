@@ -67,16 +67,16 @@ jobs:
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
 
       - name: Gate -- gradle wrapper integrity
-        run: .delivery-gates/gates/gradle-wrapper.sh .
+        run: .delivery-gates/ci/run-gate.sh .delivery-gates/gates/gradle-wrapper.sh .
 
       - name: Gate -- secrets
         env:
           GATE_SECRETS_MODE: diff
           GATE_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: .delivery-gates/gates/secrets.sh .
+        run: .delivery-gates/ci/run-gate.sh .delivery-gates/gates/secrets.sh .
 
       - name: Gate -- jvm tests
-        run: .delivery-gates/gates/jvm-test.sh .
+        run: .delivery-gates/ci/run-gate.sh .delivery-gates/gates/jvm-test.sh .
 
       # Consumers get shell linting of their own scripts. The gate returns
       # exit 3 (not applicable) rather than 0 on a repository with no shell
@@ -88,7 +88,7 @@ jobs:
       # that cannot fail, in a repository whose central argument is that such a
       # gate is worse than none because it reads as coverage.
       - name: Gate -- shellcheck
-        run: .delivery-gates/gates/shellcheck.sh .
+        run: .delivery-gates/ci/run-gate.sh .delivery-gates/gates/shellcheck.sh .
 
       # Reports are the interface. A caller that greps logs for "failed" is
       # making the same mistake as a caller that trusts an exit code alone.

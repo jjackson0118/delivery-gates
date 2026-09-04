@@ -97,7 +97,19 @@ gate_init() {
     _GATE_NAME="$1"
     _GATE_UNIT="$2"
     _GATE_START=$(date +%s)
-    mkdir -p "$GATE_REPORT_DIR"
+    mkdir -p "$GATE_REPORT_DIR" || {
+        printf ':: cannot create report dir %s\n' "$GATE_REPORT_DIR" >&2
+        exit 2
+    }
+    # Resolve to an absolute path here, before any gate cds to its target.
+    # GATE_REPORT_DIR defaults to a relative path, so a gate invoked as
+    # `gate.sh /some/other/repo` would create the directory in the caller's
+    # cwd and then try to write the report relative to the target, where it
+    # does not exist. The write fails, the ERR trap fires, and the gate exits 1
+    # with no report -- announcing "found what it looks for" for a gate that
+    # found nothing. Every invocation so far passed an absolute path, so this
+    # sat undetected behind correct usage.
+    GATE_REPORT_DIR="$(cd "$GATE_REPORT_DIR" && pwd)"
     trap '_gate_on_err $? $LINENO' ERR
     printf ':: gate %s starting\n' "$_GATE_NAME" >&2
 }
