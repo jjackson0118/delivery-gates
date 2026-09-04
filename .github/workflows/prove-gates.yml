@@ -16,12 +16,18 @@ on:
   schedule:
     - cron: "17 6 * * *"
   pull_request:
-    paths:
+    paths: &gate_paths
       - "gates/**"
       - "lib/**"
       - "faults/**"
       - "prove-gates-fail.sh"
       - ".github/workflows/prove-gates.yml"
+  # Also on push to main. Without this, a gate reaching main outside a pull
+  # request stays unproven until the next scheduled run -- and the proof is
+  # only valid for the version of the gates it ran against.
+  push:
+    branches: [main]
+    paths: *gate_paths
 
 permissions:
   contents: read
