@@ -1,5 +1,11 @@
-# Lints the gates themselves. A gate with a shell bug is a gate that cannot be
-# trusted to fail correctly.
+# Lints the gate scripts. A gate with a shell bug cannot be trusted to fail
+# correctly.
+#
+# This calls gates/shellcheck.sh rather than running shellcheck inline. It used
+# to be an inline apt-get-and-run step, which made it the one check in this
+# repository that could not be run locally, could not be run by Jenkins, and
+# could not be exercised by prove-gates-fail. The check watching every other
+# script was the only one with no proof that it fires.
 name: ci
 
 on:
@@ -15,7 +21,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: shellcheck
-        run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
-          shellcheck --severity=warning lib/*.sh gates/*.sh prove-gates-fail.sh faults/*/inject.sh
+      - name: Gate -- shellcheck
+        run: ./gates/shellcheck.sh .
+      - name: Publish gate report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: gate-reports-shellcheck
+          path: .gate-reports/
+          include-hidden-files: true
+          if-no-files-found: error

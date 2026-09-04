@@ -7,13 +7,26 @@
 # between a gate that caught something and a gate that fell over.
 #
 # EXIT CODES
-#   0  pass   -- the gate ran, looked at something, and found nothing
-#   1  fail   -- the gate ran and found the thing it looks for
-#   2  error  -- the gate could not run, or ran and looked at nothing
+#   0  pass            -- the gate ran, looked at something, and found nothing
+#   1  fail            -- the gate ran and found the thing it looks for
+#   2  error           -- the gate could not run, or ran and looked at nothing
+#   3  not applicable  -- the gate does not apply to this repository
 #
 # The 1/2 split is the point. A caller that accepts "non-zero" as proof a gate
 # fired will also accept a gate that crashed on startup, which proves nothing
 # and is indistinguishable from coverage.
+#
+# 3 exists because 2 was being used for two different things. A shell linter
+# pointed at a repository with no shell files has not failed and has not found
+# anything -- it does not apply, and that is a third answer. Collapsing it into
+# "error" makes a correct outcome look like a broken gate; collapsing it into
+# "pass" is worse, because it claims coverage that was never possible.
+#
+# The distinction is borrowed from a service-admission contract on another
+# system, where the same conflation caused a real incident: a supervisor's
+# health loop killed and restarted a service nine times overnight on nodes
+# where its prerequisites could never be satisfied. The service was not
+# unhealthy. It was not applicable, and nothing could express that.
 #
 # VACUITY
 #   Every gate must declare what it examined, via gate_scanned. A gate that
@@ -95,6 +108,17 @@ _gate_write_report() {
   "note": "$(_json_escape "$_GATE_NOTE")"
 }
 JSONEOF
+}
+
+# gate_not_applicable <reason>  -- this gate has no work here. Exits 3.
+#
+# Distinct from a pass: the caller learns that nothing was checked and can
+# decide what that means, rather than being handed a green result.
+gate_not_applicable() {
+    gate_note "$1"
+    _gate_write_report "not_applicable" 3
+    printf ':: gate %s NOT APPLICABLE: %s\n' "$_GATE_NAME" "$1" >&2
+    exit 3
 }
 
 # gate_error <message>  -- the gate could not do its job. Exits 2.

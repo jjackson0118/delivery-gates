@@ -29,10 +29,21 @@ between evidence and theatre.
 | `0` | the gate ran, examined something, and found nothing |
 | `1` | the gate ran and found the thing it looks for |
 | `2` | the gate could not run, or ran and examined nothing |
+| `3` | the gate does not apply to this repository |
 
 The `1`/`2` split carries most of the weight. A caller that treats "non-zero"
 as proof a gate fired will accept a scanner that crashed on startup — which
 proves nothing and is indistinguishable from coverage.
+
+`3` exists because `2` was doing two jobs. A shell linter pointed at a Java
+repository has not failed and has not found anything — it does not apply, and
+that is a third answer. Collapsing it into "error" makes a correct outcome look
+like a broken gate; collapsing it into "pass" is worse, because it claims
+coverage that was never possible. The distinction is borrowed from a
+service-admission contract on another system, where the same conflation caused
+a real incident: a supervisor killed and restarted a service nine times
+overnight on nodes where its prerequisites could never be satisfied. The service
+was not unhealthy. It was not applicable, and nothing could express that.
 
 **Every gate must declare what it examined.** A gate that examined nothing
 exits `2`, never `0`. Most tools produce identical output for an empty scan and
@@ -120,6 +131,18 @@ zero executed tests is an **error**, not a pass. It also fails if the build
 result and the test results disagree, because then neither should be believed.
 The `test-empty-suite` fault deletes every test: Gradle reports success and the
 gate returns exit 2.
+
+**`shellcheck`** — static analysis of shell scripts, discovered by extension
+*and* by shebang, because an extension-only glob misses every extensionless
+executable — `gradlew` being the obvious one, and it runs on every machine
+before anything else does. Returns exit 3 rather than 0 on a repository with no
+shell files.
+
+This gate exists because the repository was violating its own argument. The
+check was an inline `apt-get install && shellcheck` step in `ci.yml`, which made
+it the one check here that could not be run locally, could not be run by
+Jenkins, and could not be exercised by `prove-gates-fail`. The check watching
+every other script was the only one with no proof that it fires.
 
 **`secrets`** — gitleaks, checksum-pinned, `--redact` always. Diff mode blocks;
 history mode reports on a schedule and does not block, because a history scan

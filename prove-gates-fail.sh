@@ -62,12 +62,18 @@ for g in "$ROOT"/gates/*.sh; do
     name="$(basename "$g" .sh)"
     dir="$(scratch "clean-$name")"
     rc="$(run_gate_in "$dir" "$name")"
-    if [ "$rc" -eq 0 ]; then
-        printf '  OK    %-18s quiet on clean input (exit 0)\n' "$name"
-        record "clean:$name" "-" "0" "$rc" "ok" "no fault injected; the gate must stay silent"; PASS=$((PASS+1))
+    # 3 is a legitimate clean-tree answer: the gate does not apply to this
+    # fixture. Accepting only 0 would force every gate to be relevant to every
+    # repository, which is how a linter ends up reporting a pass on a language
+    # it never looked at.
+    if [ "$rc" -eq 0 ] || [ "$rc" -eq 3 ]; then
+        label="quiet on clean input (exit 0)"
+        [ "$rc" -eq 3 ] && label="not applicable to this fixture (exit 3)"
+        printf '  OK    %-18s %s\n' "$name" "$label"
+        record "clean:$name" "-" "0 or 3" "$rc" "ok" "no fault injected; the gate must stay silent or declare itself not applicable"; PASS=$((PASS+1))
     else
         printf '  BAD   %-18s fired on clean input (exit %s) -- gate does not discriminate\n' "$name" "$rc"
-        record "clean:$name" "-" "0" "$rc" "MISMATCH" "no fault injected; the gate must stay silent"; FAIL=$((FAIL+1))
+        record "clean:$name" "-" "0 or 3" "$rc" "MISMATCH" "no fault injected; the gate must stay silent or declare itself not applicable"; FAIL=$((FAIL+1))
     fi
 done
 
