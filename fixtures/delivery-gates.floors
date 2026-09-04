@@ -13,6 +13,17 @@
 
 gradle-wrapper=n/a
 jvm-test=n/a
-secrets=15
+# 10, calibrated from a FRESH CLONE rather than from a working copy.
+#
+# Set at 15 initially, from this host, where `git rev-list --all` reported 25.
+# CI reported 13 and the floor failed. The gap was not the shallow clone -- that
+# was a separate defect fixed in the same change -- it was six stale
+# refs/remotes/origin/* entries for branches deleted on GitHub that a local
+# fetch had never pruned. The floor had quietly encoded one developer's ref
+# debris.
+#
+# A floor is a claim about what a gate should see. Calibrate it where the gate
+# actually runs: `git clone` to a temp dir and measure there.
+secrets=10
 shellcheck=20
 docs=20

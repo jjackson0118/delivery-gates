@@ -110,7 +110,19 @@ nothing about CI, because they were different tests.
 **Rule:** when a test exists in both places, change both or neither, and run
 the CI version verbatim before pushing.
 
-### 4. Verify the gate passes before pushing
+### 4. Calibrate a threshold where it will run
+
+The declared floors were set from this working copy. One of them read 15 where
+CI saw 13, because the local repository still held remote-tracking refs for six
+branches deleted on GitHub — the number encoded local ref debris rather than the
+repository.
+
+**Rule:** any threshold measured from a developer's checkout is measured in the
+wrong place. Clone to a temp directory and measure there, and leave margin: a
+threshold sitting exactly on an observed value is a flaky check, and a flaky
+check contaminates every result beside it.
+
+### 5. Verify the gate passes before pushing
 
 A branch was committed and a pull request opened before running the gates
 locally. The required check found seven findings that a fifteen-second local
