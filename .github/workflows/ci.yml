@@ -28,7 +28,14 @@ jobs:
       # its own assertion. Exit 3 mapping to 0 is the case that is easy to get
       # wrong and impossible to notice: it only bites a consumer that has no
       # shell files, which this repository will never be.
+      # Runs with an isolated GATE_REPORT_DIR. The first version of this step
+      # cleaned up with `rm -rf .gate-reports` and destroyed the report the
+      # gate step above had just written, so the upload found nothing. A test
+      # that damages the thing it runs beside is not isolated, and the only
+      # reason it surfaced is if-no-files-found: error on the upload.
       - name: Assert the adapter maps the contract correctly
+        env:
+          GATE_REPORT_DIR: ${{ runner.temp }}/adapter-selftest-reports
         run: |
           set -u
           # No -e. This step deliberately runs commands that exit non-zero and
@@ -53,17 +60,22 @@ jobs:
           # This resolved the report path against the target rather than the
           # caller, the write failed, and the gate exited 1 with no report --
           # "found what it looks for" from a gate that found nothing.
+          # Regression: a relative GATE_REPORT_DIR against a foreign target.
+          # This resolved the report path against the target rather than the
+          # caller, the write failed, and the gate exited 1 with no report --
+          # "found what it looks for" from a gate that found nothing.
+          # Run in a scratch cwd so the repository's own reports are untouched.
           foreign=$(mktemp -d); : > "$foreign/only.java"
-          rm -rf .gate-reports
-          ./ci/run-gate.sh ./gates/shellcheck.sh "$foreign" >/dev/null 2>&1
+          here=$(pwd); scratchcwd=$(mktemp -d)
+          ( cd "$scratchcwd" && GATE_REPORT_DIR=.gate-reports \
+              "$here/ci/run-gate.sh" "$here/gates/shellcheck.sh" "$foreign" >/dev/null 2>&1 )
           rc=$?
-          if [ "$rc" = "0" ] && [ -f .gate-reports/shellcheck.json ]; then
-            echo "ok: relative report dir + foreign target -> exit 0, report written"
+          if [ "$rc" = "0" ] && [ -f "$scratchcwd/.gate-reports/shellcheck.json" ]; then
+            echo "ok: relative report dir + foreign target -> exit 0, report written to caller"
           else
-            echo "FAIL: exit $rc, report present: $([ -f .gate-reports/shellcheck.json ] && echo yes || echo no)"
+            echo "FAIL: exit $rc, report present: $([ -f "$scratchcwd/.gate-reports/shellcheck.json" ] && echo yes || echo no)"
             fail=1
           fi
-          rm -rf .gate-reports
 
           exit $fail
       - name: Publish gate report
