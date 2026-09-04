@@ -31,8 +31,18 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TARGET="${1:?usage: prove-gates-fail.sh <path-to-target-repo>}"
-TARGET="$(cd "$TARGET" && pwd)"
+# One or more fixtures. Direction 1 runs every gate against every fixture;
+# direction 2 injects into the first.
+#
+# One fixture was not enough, and the gap was measurable rather than
+# theoretical. dora-loop has no gates/ directory, so the docs gate's structural
+# sections never ran against it -- 1 claim checked where this repository yields
+# 26. A coverage analysis deleted those four sections outright and the corpus
+# stayed green.
+[ "$#" -ge 1 ] || { echo "usage: prove-gates-fail.sh <fixture> [fixture...]" >&2; exit 2; }
+FIXTURES=()
+for _t in "$@"; do FIXTURES+=("$(CDPATH='' cd -P -- "$_t" && pwd)"); done
+TARGET="${FIXTURES[0]}"
 WORK="$(mktemp -d)"
 # chmod first: a fault that plants an unreadable directory would otherwise
 # leave the scratch tree undeletable.
@@ -49,17 +59,21 @@ declare -A FLOOR=()
 # fixtures/fixture.floors and exited 2 -- green locally, red on the runner,
 # because local and CI were pointed at differently-named copies of the same
 # repository. Checklist rule 3, in the file that describes checklist rule 3.
-FLOOR_FILE="${GATE_FLOORS:-$ROOT/fixtures/$(basename "$TARGET").floors}"
-if [ -f "$FLOOR_FILE" ]; then
-    while IFS='=' read -r _g _n; do
-        case "$_g" in ''|\#*) continue ;; esac
-        FLOOR["$_g"]="$_n"
-    done < "$FLOOR_FILE"
-else
-    printf 'no floor file at %s -- scope reduction cannot be detected for this fixture.\n' "$FLOOR_FILE" >&2
-    printf 'create it, or point GATE_FLOORS at the right one.\n' >&2
-    exit 2
-fi
+load_floors() {
+    FLOOR=()
+    FLOOR_FILE="${GATE_FLOORS:-$ROOT/fixtures/$(basename "$1").floors}"
+    if [ -f "$FLOOR_FILE" ]; then
+        while IFS='=' read -r _g _n; do
+            case "$_g" in ''|\#*) continue ;; esac
+            FLOOR["$_g"]="$_n"
+        done < "$FLOOR_FILE"
+    else
+        printf 'no floor file at %s -- scope reduction cannot be detected for this fixture.\n' "$FLOOR_FILE" >&2
+        printf 'create it, or point GATE_FLOORS at the right one.\n' >&2
+        exit 2
+    fi
+}
+load_floors "$TARGET"
 
 # report_scanned <dir> <gate> ; echoes the denominator, or "null"
 report_scanned() {
@@ -90,19 +104,25 @@ run_gate_in() {
     echo "$rc"
 }
 
-scratch() {
-    local dest="$WORK/$1"
-    cp -a "$TARGET" "$dest"
+scratch_of() {
+    local src="$1" dest="$WORK/$2"
+    cp -a "$src" "$dest"
     # A fixture with reports from a manual run would hand every fault a stale
     # verdict to read as current.
     rm -rf "$dest/.gate-reports"
     echo "$dest"
 }
 
+scratch() { scratch_of "$TARGET" "$1"; }
+
 printf '\n=== direction 1: every gate must be QUIET on a clean tree ===\n'
-for g in "$ROOT"/gates/*.sh; do
+for FIXTURE in "${FIXTURES[@]}"; do
+  fixname="$(basename "$FIXTURE")"
+  load_floors "$FIXTURE"
+  printf '  -- fixture: %s\n' "$fixname"
+  for g in "$ROOT"/gates/*.sh; do
     name="$(basename "$g" .sh)"
-    dir="$(scratch "clean-$name")"
+    dir="$(scratch_of "$FIXTURE" "clean-$fixname-$name")"
     rc="$(run_gate_in "$dir" "$name")"
     # 3 is a legitimate clean-tree answer: the gate does not apply to this
     # fixture. Accepting only 0 would force every gate to be relevant to every
@@ -112,29 +132,44 @@ for g in "$ROOT"/gates/*.sh; do
     if [ -z "$floor" ]; then
         printf '  BAD   %-18s no floor declared in %s -- a gate with no floor opts itself out of scope-reduction detection\n' \
             "$name" "$(basename "$FLOOR_FILE")"
-        record "clean:$name" "-" "floor" "-" "MISMATCH" "gate has no declared minimum denominator"; FAIL=$((FAIL+1))
+        record "clean:$fixname:$name" "-" "floor" "-" "MISMATCH" "gate has no declared minimum denominator"; FAIL=$((FAIL+1))
         continue
     fi
     scanned="$(report_scanned "$dir" "$name")"
-    if [ "$rc" -eq 3 ]; then
+    if [ "$floor" = "n/a" ]; then
+        # Declared not applicable. Stated rather than omitted, because omission
+        # is indistinguishable from forgetting -- and a gate that starts
+        # examining a fixture it was declared irrelevant to is also a change
+        # worth catching, in the opposite direction.
+        if [ "$rc" -eq 3 ]; then
+            printf '  OK    %-18s not applicable, as declared (exit 3)\n' "$name"
+            record "clean:$fixname:$name" "-" "n/a" "exit 3" "ok" "declared not applicable to this fixture"; PASS=$((PASS+1))
+        else
+            printf '  BAD   %-18s declared n/a in %s but returned exit %s\n' \
+                "$name" "$(basename "$FLOOR_FILE")" "$rc"
+            record "clean:$fixname:$name" "-" "n/a" "$rc" "MISMATCH" "gate ran against a fixture it was declared irrelevant to"; FAIL=$((FAIL+1))
+        fi
+    elif [ "$rc" -eq 3 ]; then
         # The floor declares the gate applies here. Declaring itself irrelevant
         # to a fixture it is expected to examine is a scope reduction wearing a
         # different exit code.
         printf '  BAD   %-18s reported NOT APPLICABLE, but %s declares a floor of %s\n' \
             "$name" "$(basename "$FLOOR_FILE")" "$floor"
-        record "clean:$name" "-" ">=$floor" "n/a (exit 3)" "MISMATCH" "gate declared itself not applicable to a fixture it is expected to examine"; FAIL=$((FAIL+1))
+        record "clean:$fixname:$name" "-" ">=$floor" "n/a (exit 3)" "MISMATCH" "gate declared itself not applicable to a fixture it is expected to examine"; FAIL=$((FAIL+1))
     elif [ "$rc" -ne 0 ]; then
         printf '  BAD   %-18s fired on clean input (exit %s) -- gate does not discriminate\n' "$name" "$rc"
-        record "clean:$name" "-" "0" "$rc" "MISMATCH" "no fault injected; the gate must stay silent"; FAIL=$((FAIL+1))
+        record "clean:$fixname:$name" "-" "0" "$rc" "MISMATCH" "no fault injected; the gate must stay silent"; FAIL=$((FAIL+1))
     elif [ "$scanned" = "null" ] || [ "$scanned" -lt "$floor" ]; then
         printf '  BAD   %-18s scanned %s, floor is %s -- the gate is examining less than it used to\n' \
             "$name" "$scanned" "$floor"
-        record "clean:$name" "-" ">=$floor" "$scanned" "MISMATCH" "denominator fell below the declared floor"; FAIL=$((FAIL+1))
+        record "clean:$fixname:$name" "-" ">=$floor" "$scanned" "MISMATCH" "denominator fell below the declared floor"; FAIL=$((FAIL+1))
     else
         printf '  OK    %-18s quiet on clean input, scanned %s (floor %s)\n' "$name" "$scanned" "$floor"
-        record "clean:$name" "-" ">=$floor" "$scanned" "ok" "no fault injected; the gate must stay silent and examine at least its declared floor"; PASS=$((PASS+1))
+        record "clean:$fixname:$name" "-" ">=$floor" "$scanned" "ok" "no fault injected; the gate must stay silent and examine at least its declared floor"; PASS=$((PASS+1))
     fi
+  done
 done
+load_floors "$TARGET"
 
 # Injectors run with nothing confining them to their scratch copy. One that
 # edits the real gates would weaken an unproven path invisibly -- and most of

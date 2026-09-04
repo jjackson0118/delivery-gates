@@ -67,13 +67,20 @@ assert against the report rather than grepping logs.
 ## Proving the gates
 
 ```
-$ ./prove-gates-fail.sh ../dora-loop
+$ ./prove-gates-fail.sh ../dora-loop .
 === direction 1: every gate must be QUIET on a clean tree ===
-  OK    docs               quiet on clean input (exit 0)
-  OK    gradle-wrapper     quiet on clean input (exit 0)
-  OK    jvm-test           quiet on clean input (exit 0)
-  OK    secrets            quiet on clean input (exit 0)
-  OK    shellcheck         quiet on clean input (exit 0)
+  -- fixture: dora-loop
+  OK    docs               quiet on clean input, scanned 1 (floor 1)
+  OK    gradle-wrapper     quiet on clean input, scanned 4 (floor 4)
+  OK    jvm-test           quiet on clean input, scanned 30 (floor 25)
+  OK    secrets            quiet on clean input, scanned 9 (floor 8)
+  OK    shellcheck         quiet on clean input, scanned 1 (floor 1)
+  -- fixture: delivery-gates
+  OK    docs               quiet on clean input, scanned 27 (floor 20)
+  OK    gradle-wrapper     not applicable, as declared (exit 3)
+  OK    jvm-test           not applicable, as declared (exit 3)
+  OK    secrets            quiet on clean input, scanned 23 (floor 15)
+  OK    shellcheck         quiet on clean input, scanned 28 (floor 20)
 
 === direction 2: every declared fault must be CAUGHT ===
   OK    contract-bad-denominator caught by _synthetic (exit 2)
@@ -93,7 +100,7 @@ $ ./prove-gates-fail.sh ../dora-loop
   OK    test-failing-assertion caught by jvm-test (exit 1, rule test-failure)
   OK    wrapper-tampered-jar caught by gradle-wrapper (exit 1, rule wrapper-jar-checksum-mismatch)
 
-=== result: 21 proven, 0 mismatched ===
+=== result: 26 proven, 0 mismatched ===
 ```
 
 Both directions are required. A gate never observed refusing anything is not
@@ -111,6 +118,12 @@ observation. Right answer, wrong reason, and only the rule assertion caught it.
 
 ### Declared denominators
 
+The harness takes more than one fixture, and needs to. `dora-loop` has no
+`gates/` directory, so the docs gate's structural sections never executed
+against it — 1 claim checked where this repository yields 27. A coverage
+analysis deleted all four sections and the corpus stayed green. Running the
+gates against this repository as well catches it: `docs scanned 3, floor is 20`.
+
 `fixtures/<name>.floors` records the minimum each gate must report against a
 fixture, and the harness fails when one drops below it. A gate with no entry is
 an error rather than a skip — adding a gate and forgetting its floor would
@@ -126,7 +139,8 @@ the number from what gitleaks reports having scanned, and the floor catches the
 narrowing.
 
 **What this does not catch**, measured rather than assumed — five mutations
-were run after the floors landed and one went red. A floor sees shrinkage it
+were run after the floors landed and one went red; the second fixture then
+recovered another. A floor sees shrinkage it
 can see. It does not see a gate that counts correctly and then hands the tool
 fewer files, a reduction the fixture is too thin to expose, inflation, or a
 semantic swap that produces the same number on this fixture. Those want faults
