@@ -51,6 +51,32 @@ what is solid as well as what is broken. Minimum coverage:
   sourcing the library twice.
 - Anything that can hang without a timeout.
 
+## What the first two reviews found
+
+Recorded because the numbers are the argument for doing this at all.
+
+**Contract review** (six blockers, all in code that had passed four gates and
+eighteen proofs). The worst: the secret scanner could find secrets, discard
+them, and report PASS.
+
+**Security review of the automation surface** (three critical). The build host
+has passwordless sudo, and the harness executes repository content — `fault.env`
+is sourced, `inject.sh` is run, `./gradlew` evaluates build logic at
+configuration time — so running it against a tree you did not write is a host
+takeover. Separately, the PAT held `Workflows: write`, which no script used and
+which let it rewrite the required status check and then satisfy it.
+
+**Fault-coverage analysis** (30 mutations tried, **20 survived all 21 proofs**).
+`gate_scanned "$executed"` → `"$total"` is one token and turns a fully-disabled
+suite into `PASS over 30 tests`. The vacuity rule itself — the most-argued line
+in `lib/gate.sh` — had no fault reaching it. And a `fault.env` could redefine
+the harness's own `run_gate_in`, producing *22 proven, 0 mismatched* with every
+direction-2 row fabricated and a real defect passed over.
+
+The lesson is not that the corpus was bad. **A fault corpus proves the gates
+catch the defects someone thought of.** Finding the defects nobody thought of is
+a different activity, which is why it is scheduled here rather than hoped for.
+
 ## The checklist
 
 Four rules. Each exists because of a specific failure in this repository's

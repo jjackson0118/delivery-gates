@@ -94,12 +94,42 @@ for g in "$ROOT"/gates/*.sh; do
     fi
 done
 
+# Injectors run with nothing confining them to their scratch copy. One that
+# edits the real gates would weaken an unproven path invisibly -- and most of
+# the surface is unproven, which is what the review that prompted this found.
+_code_digest() { find "$ROOT/gates" "$ROOT/lib" "$ROOT/ci" -type f -exec sha256sum {} + | sort | sha256sum; }
+_digest_before="$(_code_digest)"
+
 printf '\n=== direction 2: every declared fault must be CAUGHT ===\n'
 for f in "$ROOT"/faults/*/; do
     id="$(basename "$f")"
-    # shellcheck disable=SC1091
     GATE=""; EXPECT_EXIT=""; EXPECT_RULE=""; SELFTEST=""; DESCRIPTION=""
-    source "$f/fault.env"
+    # fault.env is read, not sourced into this shell.
+    #
+    # `source` ran repository content with the harness's own functions in
+    # scope, so a fault.env could redefine run_gate_in and fabricate every
+    # direction-2 row. Demonstrated: "22 proven, 0 mismatched" with the gates
+    # deliberately broken and _selftest-phantom still reporting NOT CAUGHT --
+    # the harness whose whole job is to prevent a green result standing in for
+    # a measurement, producing exactly that about itself.
+    #
+    # Now: evaluated in a clean subshell that inherits no functions, with only
+    # five known keys read back through a defined channel.
+    while IFS='=' read -r _k _v; do
+        case "$_k" in
+            GATE)        GATE="$_v" ;;
+            EXPECT_EXIT) EXPECT_EXIT="$_v" ;;
+            EXPECT_RULE) EXPECT_RULE="$_v" ;;
+            SELFTEST)    SELFTEST="$_v" ;;
+            DESCRIPTION) DESCRIPTION="$_v" ;;
+        esac
+    done < <(env -i bash --noprofile --norc -c '
+        set -euo pipefail
+        . "$1" >/dev/null 2>&1 || exit 1
+        for k in GATE EXPECT_EXIT EXPECT_RULE SELFTEST DESCRIPTION; do
+            printf "%s=%s\n" "$k" "${!k:-}"
+        done' _ "$f/fault.env")
+    [ -n "$GATE" ] || { printf '  BAD   %-18s fault.env declares no GATE\n' "$id"; FAIL=$((FAIL+1)); continue; }
 
     dir="$(scratch "fault-$id")"
     ( cd "$dir" && bash "$f/inject.sh" ) || { printf '  BAD   %-18s injector failed\n' "$id"; FAIL=$((FAIL+1)); continue; }
@@ -139,6 +169,12 @@ for f in "$ROOT"/faults/*/; do
         record "$id" "$GATE" "$EXPECT_EXIT" "$rc" "MISMATCH" "$DESCRIPTION"; FAIL=$((FAIL+1))
     fi
 done
+
+if [ "$(_code_digest)" != "$_digest_before" ]; then
+    printf '\n!! gates/, lib/ or ci/ changed while the fault loop ran -- an injector\n'
+    printf '!! escaped its scratch copy. Every result above is suspect.\n'
+    FAIL=$((FAIL+1))
+fi
 
 printf '\n=== result: %d proven, %d mismatched ===\n' "$PASS" "$FAIL"
 
