@@ -80,24 +80,41 @@ jobs:
 
       # Reports are the interface. A caller that greps logs for "failed" is
       # making the same mistake as a caller that trusts an exit code alone.
+      #
+      # include-hidden-files is required and is not obvious: upload-artifact
+      # ignores anything under a dot-directory by default, so .gate-reports/
+      # uploads as nothing. if-no-files-found: error is what surfaced that --
+      # on the default of 'warn' this step would have gone green while
+      # publishing an empty artifact, which is the same failure this whole
+      # repository is about, one level up from the gates.
       - name: Publish gate reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: gate-reports
           path: .gate-reports/
+          include-hidden-files: true
           if-no-files-found: error
 
+      # The vacuity rule applies to this step too. Iterating a glob that
+      # matches nothing prints an empty table and exits 0 -- a summary that
+      # reports on no gates, rendered as a clean result.
       - name: Summarise
         if: always()
         run: |
+          count=$(find .gate-reports -name '*.json' 2>/dev/null | wc -l)
+          if [ "$count" -eq 0 ]; then
+            echo "no gate reports were produced -- the gates did not run" >&2
+            exit 1
+          fi
           {
             echo "## Gate reports"
             echo
             echo "| gate | status | findings | scanned |"
             echo "|---|---|---|---|"
             for f in .gate-reports/*.json; do
-              [ -e "$f" ] || continue
               jq -r '"| \(.gate) | \(.status) | \(.findings) | \(.scanned) \(.scanned_unit) |"' "$f"
             done
+            echo
+            echo "_${count} gate(s) reported._"
           } >> "$GITHUB_STEP_SUMMARY"
