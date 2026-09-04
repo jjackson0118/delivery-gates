@@ -43,14 +43,21 @@ ROWS=()
 
 # Declared minimum denominators for this fixture. See fixtures/*.floors.
 declare -A FLOOR=()
-FLOOR_FILE="$ROOT/fixtures/$(basename "$TARGET").floors"
+# Derived from the fixture directory name, overridable because a caller's
+# checkout path is not ours to dictate. This defaulted silently to the basename
+# and CI checks the fixture out as "fixture/", so the harness looked for
+# fixtures/fixture.floors and exited 2 -- green locally, red on the runner,
+# because local and CI were pointed at differently-named copies of the same
+# repository. Checklist rule 3, in the file that describes checklist rule 3.
+FLOOR_FILE="${GATE_FLOORS:-$ROOT/fixtures/$(basename "$TARGET").floors}"
 if [ -f "$FLOOR_FILE" ]; then
     while IFS='=' read -r _g _n; do
         case "$_g" in ''|\#*) continue ;; esac
         FLOOR["$_g"]="$_n"
     done < "$FLOOR_FILE"
 else
-    printf 'no floor file at %s -- scope reduction cannot be detected for this fixture\n' "$FLOOR_FILE" >&2
+    printf 'no floor file at %s -- scope reduction cannot be detected for this fixture.\n' "$FLOOR_FILE" >&2
+    printf 'create it, or point GATE_FLOORS at the right one.\n' >&2
     exit 2
 fi
 
