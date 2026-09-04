@@ -29,10 +29,10 @@ require_cmd python3
 
 gate_tool "gradle wrapper ($(sed -n 's|.*gradle-\([0-9.]*\)-bin\.zip.*|\1|p' gradle/wrapper/gradle-wrapper.properties | head -1))"
 
-set +e
+gate_expect_failure_begin
 ./gradlew test --rerun-tasks --console=plain >/tmp/jvm-test-$$.log 2>&1
 build_rc=$?
-set -e
+gate_expect_failure_end
 
 # The XML is the source of truth, not the exit code.
 mapfile -t xml < <(find . -path '*/build/test-results/test/*.xml' -type f 2>/dev/null)
