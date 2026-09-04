@@ -45,7 +45,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: jjackson0118/dora-loop
-          path: fixture
+          # Named for the repository, not "fixture": the harness resolves a
+          # fixture's declared denominators from the directory name, and a
+          # generic path silently resolved to fixtures/fixture.floors.
+          path: dora-loop
           fetch-depth: 0
 
       - name: Set up JDK 21
@@ -59,4 +62,4 @@ jobs:
           echo "Proving gates at $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Prove
-        run: ./prove-gates-fail.sh fixture
+        run: ./prove-gates-fail.sh dora-loop

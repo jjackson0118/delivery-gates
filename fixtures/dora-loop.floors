@@ -1,0 +1,52 @@
+# Minimum denominator each gate must report against the dora-loop fixture.
+#
+# A gate that examines a strictly smaller set while still passing is the
+# failure mode no other check here catches. It does not go red, it does not go
+# to zero -- the vacuity rule only catches zero -- it just quietly looks at
+# less. A coverage analysis found five separate one-line mutations of exactly
+# this shape that survived all 21 proofs: scan one commit and report ten,
+# analyse one file and count twenty-one, drop the shebang discovery so gradlew
+# stops being examined, add -maxdepth 3, count total tests instead of executed
+# ones.
+#
+# So the fixture declares what a gate is expected to see, and the harness
+# checks it. These are floors, not exact values: the fixture gains commits and
+# tests over time and the numbers only rise. When one legitimately needs
+# lowering, that is a visible diff with a reason attached, which is the point.
+#
+# A gate with no entry here is an error, not a skip. Adding a gate and
+# forgetting its floor would otherwise silently opt it out of the one check
+# that catches scope reduction.
+#
+# WHAT THIS DOES NOT CATCH. Measured, not assumed -- five mutations were run
+# against the full corpus after these floors landed and only one went red:
+#
+#   caught   secrets narrowing its range to one commit (1 < floor 8), because
+#            the denominator now comes from what the scanner reports scanning
+#            rather than from a parallel `git rev-list` that never sees the range
+#
+#   missed   a gate that counts correctly and then hands the tool fewer files.
+#            The number stays honest; the work does not. Needs a fault that
+#            plants a violation in the LAST file, not a floor.
+#   missed   a discovery reduction the fixture is too thin to show. -maxdepth 3
+#            changes nothing when the only shell file sits at depth 1. Needs a
+#            richer fixture, not a floor.
+#   missed   inflation. A floor is a minimum; 9999 passes every one.
+#   missed   counting total tests instead of executed ones, because this fixture
+#            skips none and the two numbers are identical. Needs the
+#            test-all-disabled fault.
+#
+# So a floor catches shrinkage it can see. Four of those five want faults or a
+# better fixture instead, and they are on the roadmap. Saying which is which
+# here rather than leaving the impression the floors cover the class.
+#
+# An entry also declares the gate APPLIES to this fixture. Exit 3 (not
+# applicable) then contradicts the declaration and fails -- which is how the
+# shebang-discovery mutation gets caught: it made shellcheck declare itself
+# irrelevant to a repository it had been scanning, and the harness printed OK.
+
+gradle-wrapper=4
+jvm-test=25
+secrets=8
+shellcheck=1
+docs=1
