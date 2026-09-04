@@ -155,7 +155,7 @@ gate_init() {
     # CDPATH= and -P: cd consults CDPATH for a relative path and prints the
     # resolved directory to stdout, which the command substitution would capture
     # -- turning GATE_REPORT_DIR into a two-line string and breaking every write.
-    GATE_REPORT_DIR="$(CDPATH= cd -P -- "$GATE_REPORT_DIR" && pwd)" || {
+    GATE_REPORT_DIR="$(CDPATH='' cd -P -- "$GATE_REPORT_DIR" && pwd)" || {
         printf ':: gate %s ERROR: cannot resolve report dir\n' "$_GATE_NAME" >&2
         _GATE_FINISHED=1; exit 2
     }

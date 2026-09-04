@@ -13,7 +13,7 @@
 # scripts out of gates/ would otherwise leave this gate scanning nothing and
 # reporting a pass.
 
-SCRIPT_DIR="$(CDPATH= cd -P -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(CDPATH='' cd -P -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/gate.sh
 source "$SCRIPT_DIR/../lib/gate.sh" || {
     printf 'FATAL: cannot load the gate contract from %s\n' "$SCRIPT_DIR/../lib/gate.sh" >&2
@@ -54,6 +54,7 @@ gate_tool "shellcheck $("$BIN_DIR/shellcheck" --version 2>/dev/null | awk '/^ver
 # Via gate_lines: a find that fails partway (an unreadable subdirectory is
 # enough) used to yield a truncated list that the gate then passed over,
 # because the subshell's non-zero status was discarded.
+files=()
 gate_lines files bash -c '
     set -euo pipefail
     {
@@ -84,11 +85,13 @@ if [ "$rc" -gt 1 ]; then
     gate_error "shellcheck exited $rc -- the analyser failed to run, which is not a pass"
 fi
 
+_codes=()
 gate_lines _codes jq -r '.comments[]?.code' "$REPORT"
 for code in "${_codes[@]:-}"; do
     if [ -n "$code" ]; then gate_finding "SC$code"; fi
 done
 
+_msgs=()
 gate_lines _msgs jq -r '.comments[]? | "\(.file):\(.line) SC\(.code) \(.message)"' "$REPORT"
 for line in "${_msgs[@]:-}"; do
     if [ -n "$line" ]; then printf '   %s\n' "$line" >&2; fi

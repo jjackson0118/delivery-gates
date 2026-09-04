@@ -31,7 +31,7 @@
 # it does not verify the original. That is trust on first use, and calling it
 # verification would overstate it.
 
-SCRIPT_DIR="$(CDPATH= cd -P -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(CDPATH='' cd -P -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/gate.sh
 source "$SCRIPT_DIR/../lib/gate.sh" || {
     printf 'FATAL: cannot load the gate contract from %s\n' "$SCRIPT_DIR/../lib/gate.sh" >&2
@@ -114,6 +114,7 @@ if [ -s "$REPORT" ]; then
     # a subshell whose exit status the parent discards: a jq failure here used
     # to drop every finding on the floor and let the gate report PASS while
     # holding detected secrets.
+    _rules=()
     gate_lines _rules bash -c 'jq -r ".[].RuleID" "$1" | sort -u' _ "$REPORT"
     for rule in "${_rules[@]:-}"; do
         if [ -n "$rule" ]; then gate_finding "$rule"; fi

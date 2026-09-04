@@ -15,7 +15,7 @@
 # loop and wrong for a gate: a gate that can be satisfied by a cache entry is
 # not observing the current tree.
 
-SCRIPT_DIR="$(CDPATH= cd -P -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(CDPATH='' cd -P -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/gate.sh
 source "$SCRIPT_DIR/../lib/gate.sh" || {
     printf 'FATAL: cannot load the gate contract from %s\n' "$SCRIPT_DIR/../lib/gate.sh" >&2
@@ -42,6 +42,7 @@ if [ "$build_rc" -eq 124 ]; then
 fi
 
 # The XML is the source of truth, not the exit code.
+xml=()
 gate_lines xml find . -path '*/build/test-results/test/*.xml' -type f
 if [ "${#xml[@]}" -eq 0 ]; then
     tail -20 "$_log" >&2
