@@ -9,9 +9,20 @@ follows is what replaces it, and an honest account of why each part exists.
 **1. Gates.** Mechanical, run on every push, block the merge. They catch what
 they were built to catch and nothing else.
 
-**2. An adversarial agent pass** before merging any change to `lib/gate.sh`,
-`ci/run-gate.sh`, or `prove-gates-fail.sh`. Scoped, written down below, and
-required — not run when it occurs to someone.
+**2. An adversarial agent pass.** Ideally on every change; in practice often
+enough to keep the contract library honest, which so far has meant roughly one
+review per three or four merges.
+
+This is written as an aspiration rather than a gate because that is what it is.
+It said "required" for a while and then slipped three merges in a row, and a
+document asserting a control that does not fire is the same failure this
+repository is about — so it says what happens instead of what ought to.
+
+When it slips, the cost is measurable rather than theoretical: those three
+merges contained a hole that let the harness fabricate its own proof, a way for
+a repository under test to switch off the secret scanner, and a floors file
+encoding that silently disabled every floor. All three were found by the next
+review, none by the gates.
 
 **3. The checklist.** Four rules, each earned by a specific failure.
 
