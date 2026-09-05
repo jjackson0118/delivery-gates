@@ -1,4 +1,10 @@
 .gate-reports/
 .work/
 *.log
-backups/*.tar.gz
+# The whole local restore point, not just the tarballs. A host firewall
+# baseline snapshotted in here was root-owned, and prove-gates-fail.sh copies
+# the fixture tree in order to inject faults into it -- so three fault
+# injectors had been failing outright since that snapshot was taken, and the
+# harness reported 22 proven where it reports 26. Machine state does not belong
+# in a source tree, and a scratch directory does not belong in git.
+backups/

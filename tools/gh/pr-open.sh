@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# pr-open.sh <repo> <branch> -- opens a PR whose body is the branch's commit
-# message plus a footer recording what actually opened it.
+# pr-open.sh <repo> <branch> -- opens a PR titled after the branch's FIRST
+# commit, with every commit message in the body, plus a footer recording what
+# actually opened it.
 set -euo pipefail
 DIR="$(CDPATH='' cd -P -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.sh
@@ -11,8 +12,29 @@ branch="${2:?usage: pr-open.sh <repo> <branch>}"
 gh_check_repo "$repo"
 
 tree="/mnt/raid1/$repo"
-title=$(git -C "$tree" log --format=%s -1 "$branch")
-body=$(git -C "$tree" log --format=%b -1 "$branch")
+# Title from the FIRST commit on the branch, body from all of them.
+#
+# Both used to read the branch tip with -1, which is the least representative
+# commit of a multi-commit branch: the last thing written is usually a doc
+# touch-up or a fixup. The squash title on main is what anyone reads in
+# `git log --oneline`, and a 700-line change to the ingest path merged under
+# the title "docs: document the ingest contract" because of this. The body was
+# worse -- three of four commit messages never reached the pull request at all,
+# and survived only because GitHub concatenates them when squashing.
+base=$(git -C "$tree" merge-base "origin/main" "$branch")
+mapfile -t shas < <(git -C "$tree" rev-list --reverse "$base..$branch")
+if [ "${#shas[@]}" -eq 0 ]; then
+    printf 'ERROR: %s has no commits that main does not already have\n' "$branch" >&2
+    exit 1
+fi
+title=$(git -C "$tree" log --format=%s -1 "${shas[0]}")
+if [ "${#shas[@]}" -eq 1 ]; then
+    body=$(git -C "$tree" log --format=%b -1 "${shas[0]}")
+else
+    # Headed by subject so the reader can tell where one commit ends and the
+    # next begins; ordered oldest first, which is the order they were reasoned in.
+    body=$(git -C "$tree" log --reverse --format='### %s%n%n%b' "$base..$branch")
+fi
 
 # Says what is true rather than what sounds reassuring. An earlier version of
 # this footer said "required checks are enforced identically either way -- the
