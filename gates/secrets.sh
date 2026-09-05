@@ -91,21 +91,69 @@ else
     fi
 fi
 
+# Scan a mirror, not the checkout.
+#
+# --config closed one channel through which the repository under test could
+# define how it is judged. gitleaks has a second: .gitleaksignore. Committing
+# one holding a finding's fingerprint took this gate from fail with a
+# private-key finding to pass with none, while `scanned` ROSE from 1 to 3,
+# because the suppressing commit is itself scanned work. Every integrity check
+# this gate has still held -- the denominator was a byproduct of real work, the
+# vacuity rule saw a non-zero count, the floor was satisfied -- and the finding
+# simply disappeared.
+#
+# --gitleaks-ignore-path does NOT fix it, which is worth stating because it is
+# the obvious fix and it was the recommended one. Measured against gitleaks
+# 8.30.1: with the flag pointed at a directory containing no .gitleaksignore,
+# and separately at an empty directory, the suppression still applied. The flag
+# ADDS a location; it does not replace the default of reading one from the scan
+# target. Shipping it with a comment claiming otherwise would have left a gate
+# that reads as fixed and is not.
+#
+# So the scan runs against a `--shared --mirror` clone: a bare repository with no
+# working tree, so there is no .gitleaksignore on disk to read. --shared makes it
+# near-instant and read-only against the original object store. Verified:
+# rev-list counts are identical in both history and diff mode, so the
+# denominator computed above still describes what was scanned.
+#
+# The scan must also RUN from inside the mirror, and that is not cosmetic.
+# gitleaks picks the file up from the working directory as well as from the
+# scan target -- measured both ways round: scanning the real repository from a
+# clean directory was suppressed, and scanning the clean mirror from the real
+# repository was suppressed too. A mirror alone is not enough if the gate is
+# still standing in the checkout when it runs the scanner, and that version of
+# this fix looked correct and passed nothing.
+if [ -e ".gitleaksignore" ]; then
+    gate_finding "gitleaks-ignore-present"
+    printf '   .gitleaksignore present in the target and NOT honoured -- a gate whose\n' >&2
+    printf '   suppressions come from the thing it is judging is not a gate\n' >&2
+fi
+
+MIRROR="$(mktemp -d)"; gate_cleanup "$MIRROR"
+rm -rf "$MIRROR"
+git clone --quiet --shared --mirror . "$MIRROR" \
+    || gate_error "could not mirror the repository for scanning"
+
 REPORT="$(mktemp)"
 SCANLOG="$(mktemp)"; gate_cleanup "$SCANLOG"
 gate_expect_failure_begin
 # --config is not optional. Without it gitleaks reads .gitleaks.toml from the
 # repository under test, which lets that repository define the rules it will be
 # judged by.
-"$BIN_DIR/gitleaks" git \
+#
+# --ignore-gitleaks-allow closes a third channel: an inline "gitleaks:allow"
+# comment in the scanned source. The second channel, .gitleaksignore, is dealt
+# with above by scanning a mirror.
+( cd "$MIRROR" && "$BIN_DIR/gitleaks" git \
     --config "$SCRIPT_DIR/../config/gitleaks.toml" \
+    --ignore-gitleaks-allow \
     --redact \
     --no-banner \
     --exit-code 1 \
     --log-opts="$LOG_OPTS" \
     --report-format json \
     --report-path "$REPORT" \
-    . 2>"$SCANLOG"
+    . ) 2>"$SCANLOG"
 rc=$?
 gate_expect_failure_end
 
