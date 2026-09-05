@@ -1,0 +1,16 @@
+# The secret scanner's configuration, shipped with the gate.
+#
+# gitleaks reads .gitleaks.toml from its working directory. The gate used to
+# pass no --config, so a repository under test could commit five lines defining
+# one rule that matches nothing and switch the scanner off entirely. A review
+# demonstrated it: a planted AWS credential, exit 0, a denominator above the
+# floor, and every other layer satisfied -- the vacuity rule, the declared
+# floor, and "the denominator is a byproduct of the work" all held, because the
+# work itself had been reconfigured.
+#
+# A gate whose rules come from the thing it is judging is not a gate.
+
+title = "delivery-gates default"
+
+[extend]
+useDefault = true

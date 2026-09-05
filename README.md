@@ -73,13 +73,13 @@ $ ./prove-gates-fail.sh ../dora-loop .
   OK    docs               quiet on clean input, scanned 1 (floor 1)
   OK    gradle-wrapper     quiet on clean input, scanned 4 (floor 4)
   OK    jvm-test           quiet on clean input, scanned 30 (floor 25)
-  OK    secrets            quiet on clean input, scanned 9 (floor 8)
+  OK    secrets            quiet on clean input, scanned 9 (floor 7)
   OK    shellcheck         quiet on clean input, scanned 1 (floor 1)
   -- fixture: delivery-gates
   OK    docs               quiet on clean input, scanned 27 (floor 20)
   OK    gradle-wrapper     not applicable, as declared (exit 3)
   OK    jvm-test           not applicable, as declared (exit 3)
-  OK    secrets            quiet on clean input, scanned 23 (floor 15)
+  OK    secrets            quiet on clean input, scanned 12 (floor 10)
   OK    shellcheck         quiet on clean input, scanned 28 (floor 20)
 
 === direction 2: every declared fault must be CAUGHT ===
