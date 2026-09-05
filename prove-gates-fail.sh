@@ -42,6 +42,37 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [ "$#" -ge 1 ] || { echo "usage: prove-gates-fail.sh <fixture> [fixture...]" >&2; exit 2; }
 FIXTURES=()
 for _t in "$@"; do FIXTURES+=("$(CDPATH='' cd -P -- "$_t" && pwd)"); done
+
+# Taken HERE, at the top, not later.
+#
+# The first version of this guard took its baseline just before direction 2,
+# which left direction 1 -- the pass that measures every denominator and checks
+# them against the floors -- entirely unwatched. That is the half where the
+# corruption this guard exists to catch actually occurred. Proven by testing it:
+# touching a fixture eight seconds into a run changed nothing, because the
+# baseline had not been taken yet. A guard whose blind spot covers the thing it
+# was written for is worse than no guard, because it reads as coverage.
+
+# The fixtures are the harness's OTHER input, and until now nothing watched
+# them. _code_digest protects the harness from a fault that escapes its scratch
+# copy; this protects it from a fixture that changes underneath the run.
+#
+# Observed, not hypothetical: a mutation-testing run against ../dora-loop was
+# editing that tree while this harness copied it, and the result came back
+# "25 proven, 1 mismatched". Re-running against the quiet tree gave 26/0 again.
+# A number that depends on whether someone else happened to be working at the
+# time is not a measurement, and the failure is silent -- it reports a plausible
+# number rather than an error, which is the exact defect class this repository
+# exists to argue about. The harness should not do it either.
+#
+# Digested rather than refused-on-dirty: this is meant to be run against a
+# working tree mid-development, so a dirty fixture is normal. A fixture that
+# changes DURING the run is not.
+_fixture_digest() {
+    find "${FIXTURES[@]}" -type f -printf '%m %p\n' -exec sha256sum {} + \
+        2>/dev/null | sort | sha256sum
+}
+_fixture_before="$(_fixture_digest)"
 TARGET="${FIXTURES[0]}"
 
 # Duplicates and basename collisions both nest: scratch_of does `cp -a src dest`
@@ -337,6 +368,13 @@ done
 if [ "$(_code_digest)" != "$_digest_before" ]; then
     printf '\n!! gates/, lib/ or ci/ changed while the fault loop ran -- an injector\n'
     printf '!! escaped its scratch copy. Every result above is suspect.\n'
+    FAIL=$((FAIL+1))
+fi
+
+if [ "$(_fixture_digest)" != "$_fixture_before" ]; then
+    printf '\n!! a fixture tree changed while this run was in progress. Every\n'
+    printf '!! denominator above was measured against a moving target, so the\n'
+    printf '!! result is void rather than merely wrong. Re-run against a quiet tree.\n'
     FAIL=$((FAIL+1))
 fi
 

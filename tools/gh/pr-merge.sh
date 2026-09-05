@@ -15,8 +15,16 @@ n="${2:?usage: pr-merge.sh <repo> <number>}"
 gh_check_repo "$repo"; gh_check_number "$n"
 
 pr=$(gh_api GET "https://api.github.com/repos/$GH_OWNER/$repo/pulls/$n")
-branch=$(jq -r .head.ref <<<"$pr")
-title=$(jq -r .title <<<"$pr")
+branch=$(jq -r '.head.ref // empty' <<<"$pr")
+title=$(jq -r '.title // empty' <<<"$pr")
+# curl here does not use --fail, so a 4xx arrives as a JSON error body with a
+# success exit status. Without this, jq yields the string "null" and the script
+# went on to attempt a merge titled "null".
+if [ -z "$branch" ] || [ -z "$title" ]; then
+    printf 'ERROR: could not read %s #%s: %s\n' "$repo" "$n" \
+        "$(jq -r '.message // "no response"' <<<"$pr")" >&2
+    exit 1
+fi
 
 out=$(gh_api PUT "https://api.github.com/repos/$GH_OWNER/$repo/pulls/$n/merge" \
     -d "$(jq -n --arg t "$title" '{merge_method:"squash", commit_title:$t}')")
