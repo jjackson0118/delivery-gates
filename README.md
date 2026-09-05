@@ -264,7 +264,7 @@ every other script was the only one with no proof that it fires.
 citations resolve to a real file and a real line; every gate is documented and
 every documented gate exists; every fault named in prose is present; the
 exit-code table matches what `lib/gate.sh` implements; the claimed proof count
-equals gates + faults; relative links resolve.
+equals gates x fixtures + faults; relative links resolve.
 
 Only the mechanical half. Whether a paragraph is *true* still needs a reader —
 but "does this line exist" and "does this number match the corpus" are
@@ -292,7 +292,7 @@ overstate it.
 
 One maintainer, AI-assisted, no second human — so the review process is written
 down rather than assumed: [`docs/REVIEW.md`](docs/REVIEW.md). It covers the
-adversarial pass required before any change to the contract library, and four
+adversarial pass required before any change to the contract library, and five
 checklist rules, each earned by a specific failure in this repository's history.
 
 It also states which parts are enforced by a gate and which are only habit,

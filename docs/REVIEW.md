@@ -24,7 +24,7 @@ a repository under test to switch off the secret scanner, and a floors file
 encoding that silently disabled every floor. All three were found by the next
 review, none by the gates.
 
-**3. The checklist.** Four rules, each earned by a specific failure.
+**3. The checklist.** Five rules, each earned by a specific failure.
 
 ## Why layer 2 exists
 
@@ -37,7 +37,7 @@ discarded, and `gate_finish` then overwrote the error report with a pass.
 
 Every one of the six was invisible to `prove-gates-fail.sh`, which injects
 source defects into fixtures and had never exercised a broken enumeration, an
-unwritable report directory, a killed gate, or a malformed denominator. There
+unwritable report directory, or a malformed denominator. There
 is now a fault for each, from `faults/contract-broken-enumeration` through
 `faults/contract-open-expect-region`.
 
@@ -90,8 +90,11 @@ a different activity, which is why it is scheduled here rather than hoped for.
 
 ## The checklist
 
-Four rules. Each exists because of a specific failure in this repository's
+Five rules. Each exists because of a specific failure in this repository's
 history, named so the rule is not mistaken for ceremony.
+
+(This said "four" while listing five, in a document about verifying claims. A
+reviewer counted; nothing else did.)
 
 ### 1. Verify the edit applied
 
@@ -148,10 +151,10 @@ run would have caught.
 `gates/docs.sh` enforces the mechanical half of documentation accuracy:
 citations resolve, gates are documented, faults named in prose exist, the
 exit-code table matches the implementation, the claimed proof count equals
-gates plus faults, relative links resolve.
+gates x fixtures + faults, relative links resolve.
 
-Rules 1 through 4 are **not** enforced by anything. They are habits, written
-down because each was learned by shipping the failure. Automating rule 4 is
+None of the five is enforced by anything. They are habits, written down
+because each was learned by shipping the failure. Automating rules 4 and 5 is
 possible — a pre-push hook — and is not built. Rules 1 to 3 describe how a
 change is made rather than what it contains, and are probably not mechanisable.
 Saying so is better than implying the checklist is a control.
