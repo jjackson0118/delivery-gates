@@ -36,9 +36,22 @@ jobs:
   prove:
     runs-on: ubuntu-latest
     steps:
+      # Both fixtures are checked out as SIBLINGS, and that is the point of the
+      # path: on this step.
+      #
+      # This repository used to be checked out at the workspace root with
+      # dora-loop nested inside it at path: dora-loop, so one fixture contained
+      # the other. The harness guards duplicate paths and duplicate basenames --
+      # both satisfied here -- but the property that causes the damage is
+      # containment. Measured on a nested tree, gates run directly against the
+      # workspace reported 33 documented claims and 31 shell files against a
+      # true 28 and 30: this repository's own denominators inflated by exactly
+      # dora-loop's file counts, and inflation is invisible because floors are
+      # minimums.
       - name: Check out the gates
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          path: delivery-gates
           # Full history. This repository is now a fixture for its own gates,
           # and the default shallow clone gave the secret scanner exactly one
           # commit -- caught on the runner by the declared floor, as
@@ -65,6 +78,7 @@ jobs:
           java-version: "21"
 
       - name: Record the gate version being proven
+        working-directory: delivery-gates
         run: |
           echo "Proving gates at $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
 
@@ -74,4 +88,5 @@ jobs:
         # against dora-loop alone they were dead code in every proof -- 1 claim
         # checked where this yields 27. A coverage analysis deleted all four
         # sections and the corpus stayed green.
-        run: ./prove-gates-fail.sh dora-loop .
+        working-directory: delivery-gates
+        run: ./prove-gates-fail.sh ../dora-loop .
