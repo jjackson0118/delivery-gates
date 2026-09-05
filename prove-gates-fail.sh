@@ -43,6 +43,19 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FIXTURES=()
 for _t in "$@"; do FIXTURES+=("$(CDPATH='' cd -P -- "$_t" && pwd)"); done
 TARGET="${FIXTURES[0]}"
+
+# Duplicates and basename collisions both nest: scratch_of does `cp -a src dest`
+# and cp copies INTO an existing directory, so the same fixture twice doubles
+# every denominator and the run stays green because floors are minimums. Two
+# different fixtures sharing a basename is worse -- the second one's gates then
+# run over a tree containing both.
+_uniq_paths=$(printf '%s\n' "${FIXTURES[@]}" | sort -u | wc -l)
+_uniq_names=$(for _f in "${FIXTURES[@]}"; do basename "$_f"; done | sort -u | wc -l)
+if [ "$_uniq_paths" -ne "${#FIXTURES[@]}" ] || [ "$_uniq_names" -ne "${#FIXTURES[@]}" ]; then
+    echo "fixtures must be distinct paths with distinct basenames" >&2
+    printf '  given: %s\n' "$*" >&2
+    exit 2
+fi
 WORK="$(mktemp -d)"
 # chmod first: a fault that plants an unreadable directory would otherwise
 # leave the scratch tree undeletable.
@@ -63,8 +76,22 @@ load_floors() {
     FLOOR=()
     FLOOR_FILE="${GATE_FLOORS:-$ROOT/fixtures/$(basename "$1").floors}"
     if [ -f "$FLOOR_FILE" ]; then
-        while IFS='=' read -r _g _n; do
+        while IFS='=' read -r _g _n || [ -n "$_g" ]; do
+            # Strip \r from BOTH halves before anything looks at them: on a CRLF
+            # file a blank line arrives as "\r", which is not empty, so the
+            # skip below missed it and the malformed-value check then reported
+            # an entry with no name.
+            _g="${_g%$'\r'}"; _n="${_n%$'\r'}"
             case "$_g" in ''|\#*) continue ;; esac
+            # Validated here, because the comparison downstream sits in an
+            # `elif`, where `[`'s "integer expression expected" is invisible to
+            # errexit: the condition evaluates false and control falls through
+            # to the OK branch. A CRLF floors file silently disabled every floor
+            # and the run stayed green.
+            case "$_n" in
+                n/a) ;;
+                ''|*[!0-9]*) printf 'malformed floor in %s: %s=%s\n' "$FLOOR_FILE" "$_g" "$_n" >&2; exit 2 ;;
+            esac
             FLOOR["$_g"]="$_n"
         done < "$FLOOR_FILE"
     else
@@ -174,7 +201,18 @@ load_floors "$TARGET"
 # Injectors run with nothing confining them to their scratch copy. One that
 # edits the real gates would weaken an unproven path invisibly -- and most of
 # the surface is unproven, which is what the review that prompted this found.
-_code_digest() { find "$ROOT/gates" "$ROOT/lib" "$ROOT/ci" -type f -exec sha256sum {} + | sort | sha256sum; }
+# Covers everything an injector could change to alter a later verdict, not just
+# the three directories the first version watched. A review escaped that one by
+# rewriting faults/, fixtures/, tools/gh/ (the token-handling code) and this
+# script itself -- none of which were hashed -- and by restoring a sabotaged
+# gate before the single end-of-loop comparison ran.
+#
+# Modes are included: chmod -x on a gate is a change the content hash cannot see.
+_code_digest() {
+    find "$ROOT/gates" "$ROOT/lib" "$ROOT/ci" "$ROOT/faults" "$ROOT/fixtures" \
+         "$ROOT/tools" "$ROOT/prove-gates-fail.sh" -type f -printf '%m %p\n' -exec sha256sum {} + \
+        2>/dev/null | sort | sha256sum
+}
 _digest_before="$(_code_digest)"
 
 printf '\n=== direction 2: every declared fault must be CAUGHT ===\n'
@@ -192,7 +230,28 @@ for f in "$ROOT"/faults/*/; do
     #
     # Now: evaluated in a clean subshell that inherits no functions, with only
     # five known keys read back through a defined channel.
-    while IFS='=' read -r _k _v; do
+    # NUL-delimited, because a newline-delimited channel is forgeable by its
+    # own payload. The previous version printed six "key=value" lines and the
+    # parent re-read them with a line loop: a newline inside the LAST value --
+    # nothing follows it to overwrite -- set every other variable. A review
+    # weaponised that into "26 proven, 0 mismatched" with a genuinely broken
+    # gate and _selftest-phantom reporting caught. The earlier `source` evasion
+    # needed a specific `if` on $id; this one needed nothing.
+    #
+    # Values are also refused if they contain a newline at the source, each key
+    # is accepted once, and every field is validated below. Framing alone is
+    # not enough when the reader is this credulous.
+    # No newline check inside the subshell. Two attempts at one failed there:
+    # "$(printf "\n")" is the empty string because command substitution strips
+    # trailing newlines, so the pattern matched every value; and $'\n' contains
+    # a literal single quote, which terminates the single-quoted script this
+    # subshell runs. Neither is needed -- NUL framing already stops a value
+    # forging a key, and the field validators below reject newlines everywhere
+    # except DESCRIPTION, where one is untidy rather than dangerous.
+    _seen=""
+    while IFS= read -r -d '' _k && IFS= read -r -d '' _v; do
+        case " $_seen " in *" $_k "*) printf '  BAD   %-18s fault.env sets %s more than once\n' "$id" "$_k"; FAIL=$((FAIL+1)); continue 2 ;; esac
+        _seen="$_seen $_k"
         case "$_k" in
             GATE)        GATE="$_v" ;;
             EXPECT_EXIT) EXPECT_EXIT="$_v" ;;
@@ -201,18 +260,39 @@ for f in "$ROOT"/faults/*/; do
             DESCRIPTION) DESCRIPTION="$_v" ;;
             EXPECT_SCANNED_MIN) EXPECT_SCANNED_MIN="$_v" ;;
         esac
-    done < <(env -i bash --noprofile --norc -c '
+    done < <(timeout 10 env -i bash --noprofile --norc -c '
         set -euo pipefail
         . "$1" >/dev/null 2>&1 || exit 1
         for k in GATE EXPECT_EXIT EXPECT_RULE SELFTEST DESCRIPTION EXPECT_SCANNED_MIN; do
-            printf "%s=%s\n" "$k" "${!k:-}"
-        done' _ "$f/fault.env")
+            v="${!k:-}"
+            printf "%s\0%s\0" "$k" "$v"
+        done' _ "$f/fault.env" </dev/null)
+
+    # Validated, not merely parsed. An unvalidated EXPECT_EXIT or
+    # EXPECT_SCANNED_MIN reaches `[` as a non-integer, where the error is
+    # invisible to errexit and the comparison quietly evaluates false.
+    _bad=""
+    case "$GATE" in ''|*[!A-Za-z0-9_-]*) _bad="GATE" ;; esac
+    case "$EXPECT_EXIT" in ''|[0-3]) ;; *) _bad="EXPECT_EXIT" ;; esac
+    case "$SELFTEST" in ''|mismatch) ;; *) _bad="SELFTEST" ;; esac
+    case "$EXPECT_SCANNED_MIN" in ''|*[!0-9]*) [ -z "$EXPECT_SCANNED_MIN" ] || _bad="EXPECT_SCANNED_MIN" ;; esac
+    if [ -n "$_bad" ]; then
+        printf '  BAD   %-18s fault.env has an invalid %s\n' "$id" "$_bad"
+        record "$id" "${GATE:-?}" "-" "-" "MISMATCH" "invalid $_bad in fault.env"; FAIL=$((FAIL+1)); continue
+    fi
     [ -n "$GATE" ] || { printf '  BAD   %-18s fault.env declares no GATE\n' "$id"; FAIL=$((FAIL+1)); continue; }
 
+    _digest_fault_before="$(_code_digest)"
     dir="$(scratch "fault-$id")"
     ( cd "$dir" && bash "$f/inject.sh" ) || { printf '  BAD   %-18s injector failed\n' "$id"; FAIL=$((FAIL+1)); continue; }
 
     rc="$(run_gate_in "$dir" "$GATE")"
+    if [ "$(_code_digest)" != "$_digest_fault_before" ]; then
+        printf '  BAD   %-18s the harness tree changed while this fault ran -- its injector escaped its scratch copy\n' "$id"
+        record "$id" "$GATE" "-" "-" "MISMATCH" "injector modified the harness tree"; FAIL=$((FAIL+1))
+        _digest_before="$(_code_digest)"
+        continue
+    fi
     report="$dir/.gate-reports/$GATE.json"
 
     verdict="ok"

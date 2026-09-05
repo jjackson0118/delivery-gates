@@ -94,7 +94,11 @@ fi
 REPORT="$(mktemp)"
 SCANLOG="$(mktemp)"; gate_cleanup "$SCANLOG"
 gate_expect_failure_begin
+# --config is not optional. Without it gitleaks reads .gitleaks.toml from the
+# repository under test, which lets that repository define the rules it will be
+# judged by.
 "$BIN_DIR/gitleaks" git \
+    --config "$SCRIPT_DIR/../config/gitleaks.toml" \
     --redact \
     --no-banner \
     --exit-code 1 \
@@ -127,7 +131,19 @@ rm -f "$REPORT"
 # separate `git rev-list` that never sees LOG_OPTS. Computed independently they
 # can disagree silently: narrowing the range to a single commit left the count
 # reporting ten, so the gate claimed ten commits examined having examined one.
-actually_scanned="$(grep -oE '[0-9]+ commits scanned' "$SCANLOG" | grep -oE '^[0-9]+' | tail -1)"
+# head -1: gitleaks prints this as its first stderr line, and `tail -1` picked
+# the last of several matches -- a later log line mentioning a filename that
+# happens to contain the phrase would have set the denominator.
+#
+# `|| true` because under pipefail a non-matching grep aborts on the assignment
+# itself, so the -z diagnostic below -- written precisely for the day gitleaks
+# rewords this line -- was unreachable, and the operator got a line number.
+# Not anchored: gitleaks prefixes every line with an ANSI-coloured timestamp
+# that begins with digits, so a ^[^0-9]* anchor never matches. head -1 rather
+# than tail -1 because gitleaks emits this as its first count line, and a later
+# line quoting a filename that happens to contain the phrase would otherwise
+# set the denominator.
+actually_scanned="$(grep -oE '[0-9]+ commits scanned' "$SCANLOG" | head -1 | grep -oE '^[0-9]+' || true)"
 if [ -z "$actually_scanned" ]; then
     gate_error "gitleaks did not report how many commits it scanned -- the denominator cannot be established from the scanner's own work"
 fi

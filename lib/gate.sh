@@ -105,6 +105,10 @@ _gate_mark_abort() {
 # Any command failing outside an explicit check.
 _gate_on_err() {
     local rc=$1 line=$2
+    # Subshells inherit this trap under set -E. Without the guard it fires in
+    # the subshell and again in the parent, writing the report twice and leaving
+    # the less informative of the two messages.
+    if [ "${BASHPID:-$$}" != "$$" ]; then exit "$rc"; fi
     trap - ERR
     _gate_mark_abort
     gate_error "unexpected failure at line $line (exit $rc) -- the gate did not complete"
