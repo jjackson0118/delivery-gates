@@ -42,7 +42,15 @@ gate_tool "gradle wrapper ($(sed -n 's|.*gradle-\([0-9.]*\)-bin\.zip.*|\1|p' gra
 
 _log="$(mktemp)"; gate_cleanup "$_log"
 gate_expect_failure_begin
-timeout "$GATE_TIMEOUT" ./gradlew test --rerun-tasks --console=plain > "$_log" 2>&1
+# --continue, or one module's failure hides every module after it.
+#
+# Gradle stops at the first failing task by default. In a multi-module build
+# that means a failure in :api:test prevents :core:test from running at all, and
+# this gate then reports its finding over a DENOMINATOR THAT SHRANK BECAUSE OF
+# THE FAILURE -- observed: "1 finding(s) over 48 tests" for a suite that runs 85,
+# because the 37 tests in the other module never executed. The count looked
+# plausible, so nothing about the report said half the suite was unmeasured.
+timeout "$GATE_TIMEOUT" ./gradlew test --continue --rerun-tasks --console=plain > "$_log" 2>&1
 build_rc=$?
 gate_expect_failure_end
 if [ "$build_rc" -eq 124 ]; then
@@ -91,6 +99,32 @@ fi
 
 for _ in $(seq 1 "$failures"); do gate_finding "test-failure"; done
 for _ in $(seq 1 "$errors");   do gate_finding "test-error"; done
+
+# Name them. "found what it looks for" without saying what it found sends the
+# reader to an artifact, and when the failure is one a developer cannot
+# reproduce locally -- a slower runner, a different core count, a timing
+# assumption -- the name IS the diagnosis. This gate reported "1 finding(s)
+# over 48 tests" for a suite that runs 85 locally, and answering "which one,
+# and why did the rest not run" took a download and an unzip.
+if [ $(( failures + errors )) -gt 0 ]; then
+    python3 - "${xml[@]}" >&2 <<'NAMES_EOF'
+import sys, xml.etree.ElementTree as ET
+for path in sys.argv[1:]:
+    try:
+        root = ET.parse(path).getroot()
+    except Exception:
+        continue
+    for case in root.iter("testcase"):
+        bad = case.find("failure")
+        if bad is None:
+            bad = case.find("error")
+        if bad is None:
+            continue
+        where = "{}.{}".format(case.get("classname", "?").rsplit(".", 1)[-1], case.get("name", "?"))
+        msg = (bad.get("message") or bad.get("type") or "").strip().splitlines()
+        print("   {}  {}".format(where, msg[0][:160] if msg else ""))
+NAMES_EOF
+fi
 
 # A green build with a red count, or vice versa, means the two disagree and
 # neither should be trusted.
