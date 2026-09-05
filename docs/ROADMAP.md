@@ -10,31 +10,26 @@ knew.
 
 ## Now
 
-**1. Security review of the automation surface.**
-A fine-grained PAT now lives on the build host and two scripts read it to open
-and merge pull requests. That is a new credential and a new privilege path, and
-it was added without review. Covers: token scope against actual need, the
-scripts that read it, `GITHUB_TOKEN` permissions in every workflow, and the two
-deploy keys. Owed since the automation landed.
+**1. More faults for paths nothing exercises.**
+The corpus proves the gates catch the 17 defects it contains. The useful
+question is the inverse: what could change in `lib/gate.sh` or a gate and still
+pass all of them? Known gaps, none of them currently covered: a killed gate
+(nothing reaches `ci/run-gate.sh`'s signal handling at all), a `fetch_verified`
+checksum mismatch, `require_cmd` with a missing tool, a scanner timeout, the
+`secrets` gate in `diff` mode — which is the mode the pipeline actually runs —
+and nine of the `docs` gate's eleven rules.
 
-**2. Fault-coverage gap analysis.**
-The corpus proves the gates catch 21 defects. The useful question is the
-inverse: what could change in `lib/gate.sh` or a gate and still pass all 21?
-An adversarial review of the contract library already found six such holes, so
-the answer is not zero. Output becomes new faults.
+Items 1 and 2 of this list used to be a security review of the automation
+surface and a fault-coverage gap analysis. Both were done; `docs/REVIEW.md`
+records them and their findings. They sat here as outstanding work for long
+enough that two documents in this directory disagreed about the state of the
+repository, which a reviewer noticed and no gate could.
 
 ## The pipeline is not end-to-end yet
 
 Everything below exists because the pipeline currently builds and gates and
 then stops. Nothing is deployed, so the loop this project is named for does not
 close.
-
-**3. The `api` module.**
-Spring Boot, ingest and metrics endpoints, actuator health, Postgres behind
-Flyway. Two things depend on it: there is nothing to deploy without it, and
-`core` has no runtime dependencies, so a vulnerability scanner would examine
-nothing and exit 0 — the failure this repository exists to argue about, in the
-scanner meant to prevent it.
 
 **4. Deploy, smoke and rollback stages.**
 Smoke verifies through the path a user takes, not a loopback port that returns
