@@ -26,6 +26,28 @@ on:
           version bump.
         type: string
         default: main
+      floors-path:
+        description: >-
+          File in the consumer repository declaring, per gate, the minimum it
+          must examine -- or n/a where the gate genuinely does not apply. This
+          is what stops a gate silently reducing its own scope: every gate
+          already refuses to pass on a ZERO denominator, but nothing noticed a
+          gate that examined less than it used to, or one that declared the
+          whole repository out of scope. Measured on a repository holding one
+          .java file: four of five gates returned exit 3, the adapter mapped
+          every one of them to 0, and the pipeline was green having checked
+          almost nothing.
+        type: string
+        default: .gates/floors
+      require-floors:
+        description: >-
+          Whether a missing floors file fails the build. Defaults to true, and
+          turning it off should be a visible line in your workflow rather than
+          the quiet default: without floors this pipeline can report success
+          over gates that examined nothing, which is the exact result the gates
+          exist to prevent.
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -94,6 +116,30 @@ jobs:
       # describing delivery-gates' own structure when consumed elsewhere.
       - name: Gate -- docs
         run: .delivery-gates/ci/run-gate.sh .delivery-gates/gates/docs.sh .
+
+      # Every gate has now run and written a report. This is where the
+      # consumer's own declaration is checked against them.
+      #
+      # It is deliberately a separate step, after all the gates and before the
+      # artifact upload, and it does not run with `if: always()`: if a gate
+      # errored the build has already failed and the denominators describe a
+      # broken run.
+      - name: Denominators -- check what was examined against what was declared
+        run: |
+          set -euo pipefail
+          if [ -f "${{ inputs.floors-path }}" ]; then
+            .delivery-gates/ci/check-floors.sh "${{ inputs.floors-path }}" .gate-reports
+          elif [ "${{ inputs.require-floors }}" = "true" ]; then
+            echo "::error::No floors file at ${{ inputs.floors-path }}."
+            echo "Without one, this pipeline cannot tell a gate that examined your"
+            echo "whole repository from one that examined none of it: a gate returns"
+            echo "exit 3 when it finds nothing in scope, and that is reported as"
+            echo "success. Declare a minimum per gate, or n/a where a gate does not"
+            echo "apply. Set require-floors: false to accept that gap deliberately."
+            exit 1
+          else
+            echo "::warning::No floors file; denominator enforcement is off by request."
+          fi
 
       # Reports are the interface. A caller that greps logs for "failed" is
       # making the same mistake as a caller that trusts an exit code alone.
