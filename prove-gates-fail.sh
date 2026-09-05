@@ -39,7 +39,21 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # sections never ran against it -- 1 claim checked where this repository yields
 # 26. A coverage analysis deleted those four sections outright and the corpus
 # stayed green.
-[ "$#" -ge 1 ] || { echo "usage: prove-gates-fail.sh <fixture> [fixture...]" >&2; exit 2; }
+DIRTY=0
+_args=()
+for _a in "$@"; do
+    case "$_a" in
+        --dirty) DIRTY=1 ;;
+        -*) echo "unknown option: $_a" >&2; exit 2 ;;
+        *) _args+=("$_a") ;;
+    esac
+done
+set -- "${_args[@]+"${_args[@]}"}"
+
+[ "$#" -ge 1 ] || {
+    echo "usage: prove-gates-fail.sh [--dirty] <fixture> [fixture...]" >&2
+    exit 2
+}
 FIXTURES=()
 for _t in "$@"; do FIXTURES+=("$(CDPATH='' cd -P -- "$_t" && pwd)"); done
 
@@ -162,16 +176,82 @@ run_gate_in() {
     echo "$rc"
 }
 
+# Clone the fixture. Do not copy it.
+#
+# This used to be `cp -a`, and that was the only copy path -- there was no mode,
+# flag or code path in which this harness measured a clean checkout. Every
+# denominator it published was therefore measured against whatever branch
+# happened to be checked out, plus the author's local refs and gitignored
+# scratch.
+#
+# That is not hypothetical. A README transcript published from this harness
+# reported `shellcheck scanned 4` because a gitignored backups/ directory held
+# three of the author's own perturbation scripts, and `secrets scanned 22`
+# because the working tree carried 34 commits across nine local branches. A
+# clean checkout gives 1 and 17. Five of ten rows were wrong, and they were
+# attributed to a commit that was never merged.
+#
+# docs/REVIEW.md rule 4 already said this exactly -- "any threshold measured
+# from a developer's checkout is measured in the wrong place; clone to a temp
+# directory and measure there" -- and was written from this same failure the day
+# before it recurred. It recurred because the only tool that produces these
+# numbers could not obey it. A rule the toolchain cannot follow is not a
+# control.
+#
+# --single-branch --no-tags is load-bearing, not tidiness. A plain `git clone`
+# of a local repository creates a remote-tracking ref for every local branch, so
+# `git rev-list --all` still counts them: measured on this fixture, cp -a gave
+# 34 commits, plain clone gave 34, and --single-branch gave 17 -- identical to a
+# fresh clone from the remote. The obvious fix would have reproduced the exact
+# defect it was written to remove.
 scratch_of() {
     local src="$1" dest="$WORK/$2"
-    cp -a "$src" "$dest"
-    # A fixture with reports from a manual run would hand every fault a stale
-    # verdict to read as current.
-    rm -rf "$dest/.gate-reports"
+
+    git -C "$src" rev-parse --git-dir >/dev/null 2>&1 \
+        || { echo "fixture is not a git repository: $src" >&2; exit 2; }
+
+    if [ "$DIRTY" -eq 1 ]; then
+        cp -a "$src" "$dest"
+        rm -rf "$dest/.gate-reports"
+    else
+        git clone --quiet --single-branch --no-tags "$src" "$dest" \
+            || { echo "could not clone fixture: $src" >&2; exit 2; }
+        # Belt and braces: a clone should carry nothing untracked, and if that
+        # ever stops being true the numbers stop being reproducible again.
+        local stray
+        stray=$(git -C "$dest" status --porcelain --ignored | wc -l)
+        [ "$stray" -eq 0 ] \
+            || { echo "clone of $src carried $stray untracked/ignored entries" >&2; exit 2; }
+    fi
+
     echo "$dest"
 }
 
 scratch() { scratch_of "$TARGET" "$1"; }
+
+# Say which tree was measured, every run, before any number is printed.
+#
+# The failure this guards against is not a wrong number; it is a number whose
+# provenance nobody recorded. A run that silently tested HEAD while the author
+# had uncommitted work, or silently tested uncommitted work and then had its
+# output pasted into a README, are the same defect from opposite directions.
+for _f in "${FIXTURES[@]}"; do
+    _n="$(basename "$_f")"
+    _head="$(git -C "$_f" rev-parse --short HEAD 2>/dev/null || echo '?')"
+    _pending=$(git -C "$_f" status --porcelain 2>/dev/null | wc -l)
+    if [ "$DIRTY" -eq 1 ]; then
+        printf '  fixture %-16s WORKING TREE at %s (%s uncommitted)\n' "$_n" "$_head" "$_pending"
+    elif [ "$_pending" -gt 0 ]; then
+        printf '  fixture %-16s %s -- %s uncommitted change(s) NOT included\n' "$_n" "$_head" "$_pending"
+    else
+        printf '  fixture %-16s %s\n' "$_n" "$_head"
+    fi
+done
+if [ "$DIRTY" -eq 1 ]; then
+    printf '\n  !! --dirty: measured against working trees, not commits. These numbers\n'
+    printf '  !! are NOT publishable -- nobody else can reproduce them. Use a clean\n'
+    printf '  !! run for anything that ends up in a document.\n'
+fi
 
 printf '\n=== direction 1: every gate must be QUIET on a clean tree ===\n'
 for FIXTURE in "${FIXTURES[@]}"; do
@@ -280,6 +360,33 @@ for f in "$ROOT"/faults/*/; do
     # forging a key, and the field validators below reject newlines everywhere
     # except DESCRIPTION, where one is untidy rather than dangerous.
     _seen=""
+    # Read through a temp file whose exit status is checked.
+    #
+    # This was `done < <(timeout 10 env -i bash ...)`, which is the construct
+    # lib/gate.sh:gate_lines() exists to replace and that
+    # faults/contract-broken-enumeration proves the gates catch -- its own
+    # DESCRIPTION calls it THE WORST ONE. It was fixed in tools/gh/pr-open.sh
+    # and left here, in the file the entire proof rests on.
+    #
+    # It was not benign. The producer prints the keys in a fixed order ending
+    # with EXPECT_SCANNED_MIN, and its exit status was discarded, so a truncated
+    # read or a timeout dropped that key FIRST -- and it is consumed under a
+    # `[ -n "$EXPECT_SCANNED_MIN" ]` guard, which silently skips when unset. The
+    # denominator assertion added specifically to catch a gate examining less
+    # than it declares was itself silently droppable, through the construct this
+    # repository names as its worst.
+    _envout="$(mktemp)"
+    if ! timeout 10 env -i bash --noprofile --norc -c '
+        set -euo pipefail
+        . "$1" >/dev/null 2>&1 || exit 1
+        for k in GATE EXPECT_EXIT EXPECT_RULE SELFTEST DESCRIPTION EXPECT_SCANNED_MIN; do
+            v="${!k:-}"
+            printf "%s\0%s\0" "$k" "$v"
+        done' _ "$f/fault.env" </dev/null > "$_envout"; then
+        rm -f "$_envout"
+        printf '  BAD   %-18s fault.env could not be read -- its declarations are unknown, not empty\n' "$id"
+        record "$id" "?" "-" "-" "MISMATCH" "fault.env unreadable"; FAIL=$((FAIL+1)); continue
+    fi
     while IFS= read -r -d '' _k && IFS= read -r -d '' _v; do
         case " $_seen " in *" $_k "*) printf '  BAD   %-18s fault.env sets %s more than once\n' "$id" "$_k"; FAIL=$((FAIL+1)); continue 2 ;; esac
         _seen="$_seen $_k"
@@ -291,13 +398,8 @@ for f in "$ROOT"/faults/*/; do
             DESCRIPTION) DESCRIPTION="$_v" ;;
             EXPECT_SCANNED_MIN) EXPECT_SCANNED_MIN="$_v" ;;
         esac
-    done < <(timeout 10 env -i bash --noprofile --norc -c '
-        set -euo pipefail
-        . "$1" >/dev/null 2>&1 || exit 1
-        for k in GATE EXPECT_EXIT EXPECT_RULE SELFTEST DESCRIPTION EXPECT_SCANNED_MIN; do
-            v="${!k:-}"
-            printf "%s\0%s\0" "$k" "$v"
-        done' _ "$f/fault.env" </dev/null)
+    done < "$_envout"
+    rm -f "$_envout"
 
     # Validated, not merely parsed. An unvalidated EXPECT_EXIT or
     # EXPECT_SCANNED_MIN reaches `[` as a non-integer, where the error is
@@ -378,7 +480,11 @@ if [ "$(_fixture_digest)" != "$_fixture_before" ]; then
     FAIL=$((FAIL+1))
 fi
 
-printf '\n=== result: %d proven, %d mismatched ===\n' "$PASS" "$FAIL"
+if [ "$DIRTY" -eq 1 ]; then
+    printf '\n=== result: %d proven, %d mismatched (--dirty: NOT PUBLISHABLE) ===\n' "$PASS" "$FAIL"
+else
+    printf '\n=== result: %d proven, %d mismatched ===\n' "$PASS" "$FAIL"
+fi
 
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
     {

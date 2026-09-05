@@ -68,19 +68,22 @@ assert against the report rather than grepping logs.
 
 ```
 $ ./prove-gates-fail.sh ../dora-loop .
+  fixture dora-loop        <sha>
+  fixture delivery-gates   <sha>
+
 === direction 1: every gate must be QUIET on a clean tree ===
   -- fixture: dora-loop
-  OK    docs               quiet on clean input, scanned 5 (floor 1)
-  OK    gradle-wrapper     quiet on clean input, scanned 4 (floor 4)
-  OK    jvm-test           quiet on clean input, scanned 81 (floor 25)
-  OK    secrets            quiet on clean input, scanned 22 (floor 7)
-  OK    shellcheck         quiet on clean input, scanned 4 (floor 1)
+  OK    docs               quiet on clean input          (floor 1)
+  OK    gradle-wrapper     quiet on clean input          (floor 4)
+  OK    jvm-test           quiet on clean input          (floor 25)
+  OK    secrets            quiet on clean input          (floor 7)
+  OK    shellcheck         quiet on clean input          (floor 1)
   -- fixture: delivery-gates
-  OK    docs               quiet on clean input, scanned 27 (floor 20)
+  OK    docs               quiet on clean input          (floor 20)
   OK    gradle-wrapper     not applicable, as declared (exit 3)
   OK    jvm-test           not applicable, as declared (exit 3)
-  OK    secrets            quiet on clean input, scanned 16 (floor 10)
-  OK    shellcheck         quiet on clean input, scanned 29 (floor 20)
+  OK    secrets            quiet on clean input          (floor 10)
+  OK    shellcheck         quiet on clean input          (floor 20)
 
 === direction 2: every declared fault must be CAUGHT ===
   OK    contract-bad-denominator caught by _synthetic (exit 2)
@@ -104,15 +107,25 @@ $ ./prove-gates-fail.sh ../dora-loop .
 === result: 27 proven, 0 mismatched ===
 ```
 
-The **verdicts** above are stable; the `scanned` counts are not. They are
-denominators measured against a working tree -- commit counts, test counts, file
-counts -- so they move with every commit, and a transcript pasted into a README
-goes stale the moment it is written. An earlier version of this block was wrong
-in six of its ten direction-1 rows, which a reviewer found and the docs gate did
-not: the gate checks the `N proven` figure, because that is derived from
-structure (gates x fixtures + faults) rather than from content, and it has no way
-to check the rest. Treat the counts as illustrative and the floors in
-`fixtures/*.floors` as the enforced thing. Measured against dora-loop at `5ee7443`.
+**The `scanned` counts are deliberately not reproduced above, and the elision
+is the point.** A real run prints one per row — `scanned <n> tests`,
+`scanned <n> commits`. Those are denominators measured against a tree, so they
+move with every commit, and `secrets` counts commits, which means *the commit
+that updates this document changes the number this document reports*. Pasting
+them is a treadmill that cannot be won, and it has been lost twice: once with a
+transcript stale in six of ten rows, and once in the commit that fixed it, which
+reported `shellcheck scanned 4` because a gitignored directory held three of my
+own scripts, and cited a sha that was never merged.
+
+What is printed here instead is what does not drift: the verdicts, the floors
+(read from `fixtures/*.floors`), and `27 proven`, which is derived from
+structure — gates × fixtures + faults — and is the one number `gates/docs.sh`
+enforces. The `<sha>` lines are literal; every run prints which commit each
+fixture was measured at, and refuses to hide uncommitted work.
+
+For live numbers, run it, or read the [prove-gates workflow](.github/workflows/prove-gates.yml)
+output. The harness clones each fixture rather than copying it, so a run on your
+machine and a run in CI measure the same thing.
 
 Both directions are required. A gate never observed refusing anything is not
 known to work; a gate never observed accepting anything is not known to
