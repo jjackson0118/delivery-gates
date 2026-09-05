@@ -101,6 +101,37 @@ if [ "$_uniq_paths" -ne "${#FIXTURES[@]}" ] || [ "$_uniq_names" -ne "${#FIXTURES
     printf '  given: %s\n' "$*" >&2
     exit 2
 fi
+
+# Distinct is not enough: one fixture must not CONTAIN another.
+#
+# The check above tests set-identity, and the property that actually causes the
+# damage is path containment. This repository's own prove-gates.yml checks
+# dora-loop out at path: dora-loop INSIDE the delivery-gates checkout and then
+# passes both -- two distinct absolute paths with two distinct basenames, so the
+# guard was satisfied while fixture 2 contained fixture 1. Measured on a nested
+# tree, gates run directly against the workspace reported 33 documented claims
+# and 31 shell files against a true 28 and 30: delivery-gates' own denominators
+# inflated by exactly dora-loop's file counts, and inflation is invisible
+# because floors are minimums.
+#
+# scratch_of now clones rather than copies, so the harness itself no longer
+# carries an untracked nested checkout into the scratch, and the numbers above
+# are unchanged through it. This check is therefore not what fixes that -- it
+# stops the arrangement being created at all, for the case where gates are run
+# directly against a workspace, which is what the reusable pipeline does.
+for _a in "${FIXTURES[@]}"; do
+    for _b in "${FIXTURES[@]}"; do
+        [ "$_a" = "$_b" ] && continue
+        case "$_b/" in
+            "$_a"/*)
+                echo "fixture nests inside another fixture:" >&2
+                printf '  %s contains %s\n' "$_a" "$_b" >&2
+                printf '  check them out as siblings; a containing fixture scans the contained one\n' >&2
+                exit 2
+                ;;
+        esac
+    done
+done
 WORK="$(mktemp -d)"
 # chmod first: a fault that plants an unreadable directory would otherwise
 # leave the scratch tree undeletable.
