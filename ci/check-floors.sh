@@ -52,6 +52,7 @@ command -v jq >/dev/null || { printf 'jq is required\n' >&2; exit 2; }
 
 fail=0
 checked=0
+declared=""
 
 # Read through a temp file whose status is checked. `while read < <(cmd)` runs
 # the command in a subshell and discards its exit status, which is how an
@@ -71,6 +72,17 @@ while IFS='=' read -r gate floor || [ -n "${gate:-}" ]; do
     gate="${gate//[[:space:]]/}"
     floor="${floor//[[:space:]]/}"
     report="$REPORTS/$gate.json"
+
+    # Counted once per distinct gate: the summary line is what a reader uses to
+    # judge coverage, and three copies of one entry is not three gates.
+    case " $declared " in
+        *" $gate "*)
+            printf '  BAD      %-16s declared more than once in %s\n' "$gate" "$FLOORS"
+            fail=1
+            continue
+            ;;
+    esac
+    declared="$declared $gate"
     checked=$(( checked + 1 ))
 
     if [ ! -f "$report" ]; then
@@ -102,6 +114,23 @@ while IFS='=' read -r gate floor || [ -n "${gate:-}" ]; do
             ;;
     esac
 
+    # The REPORT's value is validated too, not only the declaration.
+    #
+    # `[ "$scanned" -lt "$floor" ]` sits in an elif below, and `[` on a
+    # non-integer writes "integer expression expected" to stderr and returns 2 --
+    # which is neither 0 nor 1, so control falls through to the OK branch and the
+    # gate passes. lib/gate.sh:189-195 and prove-gates-fail.sh:118-125 each
+    # document this exact fall-through as the reason to validate before
+    # comparing; this script was written without it. Measured: a report with
+    # "scanned": "lots" printed OK and exited 0.
+    case "$scanned" in
+        ''|*[!0-9]*)
+            printf '  BAD      %-16s report scanned value is not an integer: %s\n' "$gate" "$scanned"
+            fail=1
+            continue
+            ;;
+    esac
+
     if [ "$status" = "not_applicable" ]; then
         printf '  MISMATCH %-16s declared applicable with floor %s, but returned not applicable\n' \
             "$gate" "$floor"
@@ -116,6 +145,34 @@ while IFS='=' read -r gate floor || [ -n "${gate:-}" ]; do
         printf '  OK       %-16s scanned %s %s (floor %s)\n' "$gate" "$scanned" "$unit" "$floor"
     fi
 done < "$tmp"
+
+# Now the other direction: a gate that RAN and has no declaration.
+#
+# This script iterated the floors file and never looked at the reports, so a
+# gate could run, write a report, and be silently unenforced -- while the header
+# above claimed "A gate with no entry is an error rather than a pass. Silence is
+# how scope quietly shrinks." That claim was false for as long as it has been
+# written here. Measured: five valid reports plus a floors file containing only
+# `docs=3` reported "1 declared gate(s) checked" and exited 0, with four gates
+# never examined.
+#
+# The correct implementation already existed twenty lines away, in
+# prove-gates-fail.sh, which loops over gates/*.sh and errors with "a gate with
+# no floor opts itself out of scope-reduction detection". The mechanism was
+# ported to consumers and the loop was inverted on the way.
+for report in "$REPORTS"/*.json; do
+    [ -e "$report" ] || continue
+    rgate="$(basename "$report" .json)"
+    case " $declared " in
+        *" $rgate "*) ;;
+        *)
+            printf '  UNDECLARED %-14s ran and wrote a report, but %s does not declare it\n' \
+                "$rgate" "$FLOORS"
+            printf '             an undeclared gate is exempt from every check in this file\n'
+            fail=1
+            ;;
+    esac
+done
 
 # An empty floors file would otherwise report success having enforced nothing --
 # the vacuity rule, applied to the thing that enforces the vacuity rule.
