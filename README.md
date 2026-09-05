@@ -70,17 +70,17 @@ assert against the report rather than grepping logs.
 $ ./prove-gates-fail.sh ../dora-loop .
 === direction 1: every gate must be QUIET on a clean tree ===
   -- fixture: dora-loop
-  OK    docs               quiet on clean input, scanned 1 (floor 1)
+  OK    docs               quiet on clean input, scanned 5 (floor 1)
   OK    gradle-wrapper     quiet on clean input, scanned 4 (floor 4)
-  OK    jvm-test           quiet on clean input, scanned 30 (floor 25)
-  OK    secrets            quiet on clean input, scanned 9 (floor 7)
-  OK    shellcheck         quiet on clean input, scanned 1 (floor 1)
+  OK    jvm-test           quiet on clean input, scanned 81 (floor 25)
+  OK    secrets            quiet on clean input, scanned 22 (floor 7)
+  OK    shellcheck         quiet on clean input, scanned 4 (floor 1)
   -- fixture: delivery-gates
   OK    docs               quiet on clean input, scanned 27 (floor 20)
   OK    gradle-wrapper     not applicable, as declared (exit 3)
   OK    jvm-test           not applicable, as declared (exit 3)
-  OK    secrets            quiet on clean input, scanned 12 (floor 10)
-  OK    shellcheck         quiet on clean input, scanned 28 (floor 20)
+  OK    secrets            quiet on clean input, scanned 16 (floor 10)
+  OK    shellcheck         quiet on clean input, scanned 29 (floor 20)
 
 === direction 2: every declared fault must be CAUGHT ===
   OK    contract-bad-denominator caught by _synthetic (exit 2)
@@ -94,14 +94,25 @@ $ ./prove-gates-fail.sh ../dora-loop .
   OK    gate-crashes-midway caught by gradle-wrapper (exit 2)
   OK    secrets-aws-key    caught by secrets (exit 1, rule generic-api-key)
   OK    secrets-private-key caught by secrets (exit 1, rule private-key)
+  OK    secrets-suppressed-by-ignorefile caught by secrets (exit 1, rule private-key)
   OK    _selftest-phantom  harness correctly reported NOT CAUGHT for an uninjected fault
   OK    shellcheck-unquoted-var caught by shellcheck (exit 1, rule SC2164)
   OK    test-empty-suite   caught by jvm-test (exit 2)
   OK    test-failing-assertion caught by jvm-test (exit 1, rule test-failure)
   OK    wrapper-tampered-jar caught by gradle-wrapper (exit 1, rule wrapper-jar-checksum-mismatch)
 
-=== result: 26 proven, 0 mismatched ===
+=== result: 27 proven, 0 mismatched ===
 ```
+
+The **verdicts** above are stable; the `scanned` counts are not. They are
+denominators measured against a working tree -- commit counts, test counts, file
+counts -- so they move with every commit, and a transcript pasted into a README
+goes stale the moment it is written. An earlier version of this block was wrong
+in six of its ten direction-1 rows, which a reviewer found and the docs gate did
+not: the gate checks the `N proven` figure, because that is derived from
+structure (gates x fixtures + faults) rather than from content, and it has no way
+to check the rest. Treat the counts as illustrative and the floors in
+`fixtures/*.floors` as the enforced thing. Measured against dora-loop at `5ee7443`.
 
 Both directions are required. A gate never observed refusing anything is not
 known to work; a gate never observed accepting anything is not known to
