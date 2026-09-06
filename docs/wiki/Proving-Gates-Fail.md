@@ -12,12 +12,14 @@ $ ./prove-gates-fail.sh ../dora-loop .
   OK    jvm-test           quiet on clean input          (floor 25)
   OK    secrets            quiet on clean input          (floor 7)
   OK    shellcheck         quiet on clean input          (floor 1)
+  OK    smoke              not applicable, as declared (exit 3)
   -- fixture: delivery-gates
   OK    docs               quiet on clean input          (floor 20)
   OK    gradle-wrapper     not applicable, as declared (exit 3)
   OK    jvm-test           not applicable, as declared (exit 3)
   OK    secrets            quiet on clean input          (floor 10)
   OK    shellcheck         quiet on clean input          (floor 20)
+  OK    smoke              not applicable, as declared (exit 3)
 
 === direction 2: every declared fault must be CAUGHT ===
   OK    contract-bad-denominator caught by _synthetic (exit 2)
@@ -38,7 +40,7 @@ $ ./prove-gates-fail.sh ../dora-loop .
   OK    test-failing-assertion caught by jvm-test (exit 1, rule test-failure)
   OK    wrapper-tampered-jar caught by gradle-wrapper (exit 1, rule wrapper-jar-checksum-mismatch)
 
-=== result: 27 proven, 0 mismatched ===
+=== result: 29 proven, 0 mismatched ===
 ```
 
 **The `scanned` counts are deliberately not reproduced above, and the elision
@@ -52,7 +54,7 @@ reported `shellcheck scanned 4` because a gitignored directory held three of my
 own scripts, and cited a sha that was never merged.
 
 What is printed here instead is what does not drift: the verdicts, the floors
-(read from `fixtures/*.floors`), and `27 proven`, which is derived from
+(read from `fixtures/*.floors`), and `29 proven`, which is derived from
 structure — gates × fixtures + faults — and is the one number `gates/docs.sh`
 enforces. The `<sha>` lines are literal; every run prints which commit each
 fixture was measured at, and refuses to hide uncommitted work.

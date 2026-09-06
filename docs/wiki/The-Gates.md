@@ -58,3 +58,39 @@ publishes no checksums file for its release archives, so that pin was captured
 by hand from one download. It detects a later substitution; it does not verify
 the original. That is trust on first use, and calling it verification would
 overstate it.
+
+**`smoke`** — verifies a deployed service actually serves, and serves the build
+that was deployed. A deploy step's exit code says the commands ran; it does not
+say the service came up, and it does not say the service that came up is the one
+you shipped. Both were observed failing during a manual deploy rehearsal on
+`dora-loop`: a release whose symlink flipped and whose unit restarted, reporting
+the *previous* release's build identity, from a deploy that returned 0.
+
+Three checks, each of which has been observed failing: the service becomes ready
+within a stated budget; `/actuator/info` reports the identity the deploy shipped
+(`SMOKE_EXPECT_SHA`); and a real product endpoint answers correctly rather than
+a health endpoint written to return 200. For `dora-loop` that last one asserts a
+report for an unknown service reads `UNOBSERVED` — a deployment serving a
+confident `0` instead is serving something that violates the contract it exists
+to enforce.
+
+The `1`/`2` split does more work here than anywhere else, because the caller
+does different things with them. Exit 1 means the service answered and the
+answer was wrong: roll back. Exit 2 means the gate could not find out, so the
+deploy must be reported as neither good nor bad. A caller treating "non-zero" as
+"roll back" will roll back a healthy release because `curl` was missing; one
+treating it as "failed" will report a change failure that never happened.
+
+Connection refused is a **finding**, not an error: nothing listening where the
+service should be is exactly what smoke looks for. That was wrong in the first
+version — the contract library runs under `set -eE`, so a failing `curl` tripped
+the ERR trap and returned exit 2, contradicting the mapping documented in the
+gate's own header. The fault sweep caught it; reading it did not.
+
+No `SMOKE_URL` means exit 3, not applicable: a repository that builds but does
+not deploy has not suffered a broken gate. That is safe only because exit 3 maps
+to success for the orchestrator and a fixture must therefore *declare* `smoke`
+in its floors file — without the declaration, forgetting to set `SMOKE_URL`
+would turn the smoke stage into a green no-op, which is this repository's
+central complaint arriving through its own newest gate.
+
