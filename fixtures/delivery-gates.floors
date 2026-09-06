@@ -26,4 +26,30 @@ jvm-test=n/a
 # actually runs: `git clone` to a temp dir and measure there.
 secrets=10
 shellcheck=20
-docs=20
+# 40, against 58 measured on a fresh clone of main. Raised from 20, which was
+# calibrated when this repository's prose was one README. Moving the long form
+# into docs/wiki/ and widening the gate's prose set took the denominator from 28
+# to 58, and a floor of 20 against 58 cannot detect anything short of deleting
+# most of the documentation -- which is the criticism this repository levels at
+# other people's checks.
+#
+# Margin is deliberate. A floor at the observed value goes red on the next
+# commit that legitimately removes a page, and a check that cries wolf gets
+# deleted.
+#
+# WHAT 40 ACTUALLY CATCHES, measured on a fresh clone rather than reasoned:
+#
+#   58   baseline, passes
+#   51   two wiki pages deleted -- ABOVE the floor, so the floor does not fire.
+#        The gate still fails, on wiki-page-orphaned and dead-relative-link,
+#        because the sidebar still points at them. A different control caught
+#        it, and saying so here is the point: a floor that gets credit for a
+#        catch it did not make is how the next person over-trusts it.
+#   16   docs/wiki deleted entirely -- BELOW the floor, so this is the case the
+#        floor exists for, and the one no link check could see, because links
+#        to nothing removed are not broken.
+#
+# So the floor covers wholesale loss and section 7 covers partial loss. Neither
+# covers a page that is quietly emptied of content while keeping its links
+# intact; that would want a fault, and there is not one.
+docs=40
