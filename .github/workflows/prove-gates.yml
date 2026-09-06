@@ -6,9 +6,17 @@
 # pull request would fill the Security tab with self-inflicted findings, add
 # minutes to every review, and eventually get switched off.
 #
-# It IS required on changes to gates/ and faults/. A proof is only valid for the
-# version of the gates it ran against, so a gate cannot be changed without
-# re-proving it.
+# It IS required on changes to gates/, faults/ and fixtures/. A proof is only
+# valid for the version of the gates it ran against, so a gate cannot be changed
+# without re-proving it.
+#
+# fixtures/ was missing from that list until a pull request raising the docs
+# floors went green having run nothing but shellcheck. A floors file is not
+# incidental data -- it is the declaration of what each gate must examine, and
+# the harness enforces it. Setting docs=999 would break the proof exactly as
+# surely as editing the gate, and would have reached main unproven, waiting for
+# a scheduled run to notice. The one place that check was missing was the
+# configuration deciding when to check.
 name: prove-gates
 
 on:
@@ -20,6 +28,7 @@ on:
       - "gates/**"
       - "lib/**"
       - "faults/**"
+      - "fixtures/**"
       - "prove-gates-fail.sh"
       - ".github/workflows/prove-gates.yml"
   # Also on push to main. Without this, a gate reaching main outside a pull
