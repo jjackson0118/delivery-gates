@@ -206,6 +206,7 @@ done
 if [ -d docs/wiki ]; then
     wiki=()
     gate_lines wiki bash -c 'find docs/wiki -name "*.md" | sort'
+    wikidir="$(cd docs/wiki && pwd -P)"
 
     claims=$(( claims + 1 ))
     if [ ! -f docs/wiki/_Sidebar.md ]; then
@@ -232,10 +233,19 @@ if [ -d docs/wiki ]; then
             [ -n "$l" ] || continue
             case "$l" in http*|mailto:*|'#'*) continue ;; esac
             claims=$(( claims + 1 ))
-            if [ ! -f "docs/wiki/$l" ]; then
-                gate_finding "wiki-link-leaves-wiki"
-                report "wiki source links outside the wiki with a relative path, which breaks once published: $l (from $w)"
-            fi
+            # RESOLVE it, do not just test that it exists. The first version of
+            # this check asked `[ -f docs/wiki/$l ]`, which is the same question
+            # section 6 asks and therefore inherits the same blind spot: a link
+            # written `../../README.md` resolves to a real file in this tree, so
+            # it passed -- while being precisely the link that dies on the
+            # published wiki. A mutation found it; reading the code did not.
+            target="$(cd docs/wiki && readlink -f "$l" 2>/dev/null || true)"
+            case "${target:-}" in
+                "$wikidir"/*) ;;   # another wiki page: section 6 checks it exists
+                *)
+                    gate_finding "wiki-link-leaves-wiki"
+                    report "wiki source uses a relative link that leaves docs/wiki, which resolves here and breaks once published: $l (from $w)" ;;
+            esac
         done
     done
 fi
