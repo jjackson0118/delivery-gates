@@ -9,8 +9,8 @@
 # THE TOKEN NEVER APPEARS IN argv. The first version passed it as
 # `curl -H "Authorization: Bearer $tok"`, which puts the credential in
 # /proc/<pid>/cmdline for the lifetime of every call -- readable by every other
-# local user and by anything with host PID visibility. On this host that is two
-# other accounts and six containers. curl reads it from stdin instead.
+# local user and by anything with host PID visibility. curl reads it from
+# stdin instead.
 
 set -uo pipefail
 set +x   # explicit: `bash -x` on these scripts would otherwise print the token
