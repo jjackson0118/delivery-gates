@@ -1,0 +1,18 @@
+# Copy to .vm-boundary-targets at the repository root and fill in for your host.
+# Gitignored: these are fleet addresses, and this repository is public.
+#
+# Every list must be non-empty. The probe refuses to run otherwise, because a
+# block it has no targets for would otherwise report a clean pass having sent
+# nothing -- the exact failure the script exists to detect in a firewall.
+
+VM=dora                    # LXD instance name of the deploy target
+VM_IP=10.0.0.2             # its address on the bridge
+GW=10.0.0.1                # the bridge address on the host
+IF=lxdbr0                  # the bridge interface
+SERVICE_PORT=8080          # the port the deployed service listens on
+
+# Reachable-looking targets that MUST be refused from inside the VM.
+# Pick real, listening services: probing a dead port proves nothing.
+TAILNET_TARGETS="100.100.100.1:22 100.100.100.1:443 100.100.100.2:22"
+LAN_TARGETS="192.168.1.1:22 192.168.1.1:80 192.168.1.1:443"
+DOCKER_TARGETS="172.17.0.1:8080 172.17.0.1:8081"
