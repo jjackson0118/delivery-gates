@@ -11,6 +11,13 @@
 # is an error" intact, and catches the opposite drift too -- a gate that starts
 # examining a fixture it was declared irrelevant to.
 
+# n/a: the harness runs gates against a repository, not a running service, so
+# there is nothing here to smoke. Declared rather than omitted -- a gate with no
+# entry is an error, and this is the gate where that matters most, because
+# smoke returns exit 3 when SMOKE_URL is unset and exit 3 maps to success for
+# the orchestrator. Without this line, a pipeline that forgot to set SMOKE_URL
+# would report green over a stage that did nothing.
+smoke=n/a
 gradle-wrapper=n/a
 jvm-test=n/a
 # 10, calibrated from a FRESH CLONE rather than from a working copy.

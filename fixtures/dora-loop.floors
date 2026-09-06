@@ -45,6 +45,13 @@
 # shebang-discovery mutation gets caught: it made shellcheck declare itself
 # irrelevant to a repository it had been scanning, and the harness printed OK.
 
+# n/a: the harness runs gates against a repository, not a running service, so
+# there is nothing here to smoke. Declared rather than omitted -- a gate with no
+# entry is an error, and this is the gate where that matters most, because
+# smoke returns exit 3 when SMOKE_URL is unset and exit 3 maps to success for
+# the orchestrator. Without this line, a pipeline that forgot to set SMOKE_URL
+# would report green over a stage that did nothing.
+smoke=n/a
 gradle-wrapper=4
 jvm-test=25
 # 7, not 8: the runner reported 8 where this host reports 9. gitleaks counts
