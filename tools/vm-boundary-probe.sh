@@ -127,9 +127,19 @@ printf 'ufw: %s%s\n\n' "$(ufw status 2>/dev/null | head -1)" \
     "$([ "$NO_UFW" -eq 1 ] && printf '  (about to be DISABLED for this run)')"
 
 if [ "$NO_UFW" -eq 1 ]; then
-    UFW_WAS="$(ufw status | head -1)"
-    ufw --force disable >/dev/null
-    trap 'ufw --force enable >/dev/null; echo; echo "ufw re-enabled: $(ufw status | head -1)"' EXIT
+    # Restore what was there, rather than assuming it was on. shellcheck caught
+    # this as an unused variable, and the unused variable was the bug: the trap
+    # enabled ufw unconditionally, so running --no-ufw on a host where ufw was
+    # already inactive would have turned it on and left the host in a state the
+    # operator did not choose. A probe must not change what it measures.
+    UFW_WAS_ACTIVE=0
+    ufw status 2>/dev/null | head -1 | grep -q 'Status: active' && UFW_WAS_ACTIVE=1
+    if [ "$UFW_WAS_ACTIVE" -eq 1 ]; then
+        ufw --force disable >/dev/null
+        trap 'ufw --force enable >/dev/null; echo; echo "ufw restored: $(ufw status | head -1)"' EXIT
+    else
+        printf 'ufw was already inactive; leaving it that way.\n'
+    fi
     printf 'ufw disabled for the duration. The boundary claims not to depend on it.\n\n'
 fi
 
