@@ -85,8 +85,25 @@ for _t in "$@"; do FIXTURES+=("$(CDPATH='' cd -P -- "$_t" && pwd)"); done
 # working tree mid-development, so a dirty fixture is normal. A fixture that
 # changes DURING the run is not.
 _fixture_digest() {
-    find "${FIXTURES[@]}" -type f -printf '%m %p\n' -exec sha256sum {} + \
-        2>/dev/null | sort | sha256sum
+    if [ "$DIRTY" -eq 1 ]; then
+        # cp -a carries the working tree, so the working tree is what must hold
+        # still.
+        find "${FIXTURES[@]}" -type f -printf '%m %p\n' -exec sha256sum {} + \
+            2>/dev/null | sort | sha256sum
+    else
+        # Clone mode carries committed content only, so that is the input to
+        # watch. Digesting the working tree here voids runs over changes that
+        # provably cannot reach a denominator: .gate-reports/ is gitignored and
+        # sits in the fixture root, so running any gate directly against a
+        # fixture -- which the README documents as normal -- killed a concurrent
+        # harness run. It did exactly that to me while I was testing the floor
+        # fix in this commit. So did any fetch, gc or branch switch, since .git
+        # dominated the file count.
+        for _f in "${FIXTURES[@]}"; do
+            git -C "$_f" rev-parse HEAD
+            git -C "$_f" ls-files -s
+        done | sha256sum
+    fi
 }
 _fixture_before="$(_fixture_digest)"
 TARGET="${FIXTURES[0]}"
@@ -150,6 +167,16 @@ declare -A FLOOR=()
 # fixtures/fixture.floors and exited 2 -- green locally, red on the runner,
 # because local and CI were pointed at differently-named copies of the same
 # repository. Checklist rule 3, in the file that describes checklist rule 3.
+# A report's scanned value comes from JSON a gate wrote, so it is validated the
+# same way a declared floor is -- digits, and few enough of them that `[` can
+# compare rather than erroring into the OK branch.
+_scanned_comparable() {
+    case "$1" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+    [ "${#1}" -le 18 ]
+}
+
 load_floors() {
     FLOOR=()
     FLOOR_FILE="${GATE_FLOORS:-$ROOT/fixtures/$(basename "$1").floors}"
@@ -166,9 +193,21 @@ load_floors() {
             # errexit: the condition evaluates false and control falls through
             # to the OK branch. A CRLF floors file silently disabled every floor
             # and the run stayed green.
+            #
+            # Digits alone are not enough. `[` returns 2 -- neither 0 nor 1 --
+            # on a value bash cannot parse as an integer, so the elif falls
+            # through to OK exactly as it does for a non-numeric one. Measured:
+            # a floor of 99999999999999999999 gave "OK docs quiet on clean
+            # input, scanned 5 (floor 99999999999999999999)" and the run
+            # reported 27 proven, 0 mismatched. 18 digits is the bound, since a
+            # signed 64-bit integer holds 19 and no denominator comes near it.
             case "$_n" in
                 n/a) ;;
                 ''|*[!0-9]*) printf 'malformed floor in %s: %s=%s\n' "$FLOOR_FILE" "$_g" "$_n" >&2; exit 2 ;;
+                *) [ "${#_n}" -le 18 ] || {
+                       printf 'floor in %s is too large to compare: %s=%s\n' "$FLOOR_FILE" "$_g" "$_n" >&2
+                       exit 2
+                   } ;;
             esac
             FLOOR["$_g"]="$_n"
         done < "$FLOOR_FILE"
@@ -330,7 +369,8 @@ for FIXTURE in "${FIXTURES[@]}"; do
     elif [ "$rc" -ne 0 ]; then
         printf '  BAD   %-18s fired on clean input (exit %s) -- gate does not discriminate\n' "$name" "$rc"
         record "clean:$fixname:$name" "-" "0" "$rc" "MISMATCH" "no fault injected; the gate must stay silent"; FAIL=$((FAIL+1))
-    elif [ "$scanned" = "null" ] || [ "$scanned" -lt "$floor" ]; then
+    elif [ "$scanned" = "null" ] || ! _scanned_comparable "$scanned" \
+            || [ "$scanned" -lt "$floor" ]; then
         printf '  BAD   %-18s scanned %s, floor is %s -- the gate is examining less than it used to\n' \
             "$name" "$scanned" "$floor"
         record "clean:$fixname:$name" "-" ">=$floor" "$scanned" "MISMATCH" "denominator fell below the declared floor"; FAIL=$((FAIL+1))
