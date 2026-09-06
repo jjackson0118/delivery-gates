@@ -50,6 +50,29 @@ REPORTS="${2:-.gate-reports}"
 [ -d "$REPORTS" ] || { printf 'no reports directory: %s\n' "$REPORTS" >&2; exit 2; }
 command -v jq >/dev/null || { printf 'jq is required\n' >&2; exit 2; }
 
+# Digits are not enough; the value has to be one `[` can actually compare.
+#
+# Both this file and prove-gates-fail.sh validated `*[!0-9]*` and then compared
+# with `[ "$a" -lt "$b" ]` sitting in an elif. On a value bash cannot parse as
+# an integer, `[` writes "integer expression expected" to stderr and returns 2 --
+# neither 0 nor 1 -- so control falls through to the OK branch. Measured: a
+# floor of 99999999999999999999 printed "OK docs scanned 9 (floor
+# 99999999999999999999)" and exited 0, with bash's complaint going nowhere.
+#
+# Both files already carried a comment naming this exact fall-through as the
+# reason to validate before comparing. Both validated digit-ness and not
+# representability, so the fall-through they describe was still live in the one
+# mechanism that detects scope reduction, announcing success.
+#
+# 18 digits is the bound: a signed 64-bit integer holds 19, so anything at or
+# under 18 is always parseable, and no real denominator comes near it.
+_representable() {  # _representable <value>
+    case "$1" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+    [ "${#1}" -le 18 ]
+}
+
 fail=0
 checked=0
 declared=""
@@ -106,13 +129,11 @@ while IFS='=' read -r gate floor || [ -n "${gate:-}" ]; do
         continue
     fi
 
-    case "$floor" in
-        ''|*[!0-9]*)
-            printf '  BAD      %-16s floor "%s" is not a number or n/a\n' "$gate" "$floor"
-            fail=1
-            continue
-            ;;
-    esac
+    if ! _representable "$floor"; then
+        printf '  BAD      %-16s floor "%s" is not a comparable integer, and not n/a\n' "$gate" "$floor"
+        fail=1
+        continue
+    fi
 
     # The REPORT's value is validated too, not only the declaration.
     #
@@ -123,13 +144,11 @@ while IFS='=' read -r gate floor || [ -n "${gate:-}" ]; do
     # document this exact fall-through as the reason to validate before
     # comparing; this script was written without it. Measured: a report with
     # "scanned": "lots" printed OK and exited 0.
-    case "$scanned" in
-        ''|*[!0-9]*)
-            printf '  BAD      %-16s report scanned value is not an integer: %s\n' "$gate" "$scanned"
-            fail=1
-            continue
-            ;;
-    esac
+    if ! _representable "$scanned"; then
+        printf '  BAD      %-16s report scanned value is not a comparable integer: %s\n' "$gate" "$scanned"
+        fail=1
+        continue
+    fi
 
     if [ "$status" = "not_applicable" ]; then
         printf '  MISMATCH %-16s declared applicable with floor %s, but returned not applicable\n' \
