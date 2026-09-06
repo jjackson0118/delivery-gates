@@ -21,9 +21,33 @@ feature of one CI vendor. Scripts port; YAML doesn't. It also means the proof
 exercises the real gate rather than a copy of it, which is the difference
 between evidence and theatre.
 
-A Jenkins wrapper is on the roadmap and **not built yet**. Portability is a
-property of the design; a second orchestrator is not something this repository
-can demonstrate today.
+A second orchestrator (Jenkins) was scoped and cut. Portability is a property
+of the design; a second orchestrator is not something this repository can
+demonstrate today. See the [scope decisions](docs/wiki/Roadmap.md).
+
+## Review the two repositories
+
+Start with [the gate contract](docs/wiki/The-Gate-Contract.md), then
+[the fault harness and its limits](docs/wiki/Proving-Gates-Fail.md). For the
+consumer side, follow [dora-loop's deployment record](https://github.com/jjackson0118/dora-loop/wiki/Deployment):
+CI builds and gates the service, deploys it to a private VM, runs this repository's
+smoke gate, and posts the observed deployment result back to the service.
+[The first completed loop](https://github.com/jjackson0118/dora-loop/actions/runs/34051994184)
+is linked from that record with the independent read-back and replay evidence.
+
+```mermaid
+flowchart LR
+    Change[Source change] --> CI[Build and reusable gates]
+    CI --> Deploy[Deploy dora-loop]
+    Deploy --> Smoke[delivery-gates smoke]
+    Smoke --> Decision[Keep or guarded rollback]
+    Decision --> Event[Record outcome and verification]
+    Event --> Report[DORA report]
+```
+
+The code and documentation are public; the demonstration service is private.
+Reviewing the evidence requires no access to the author's infrastructure.
+To use the gates in your own repository, see [Using it](docs/wiki/Using-It.md).
 
 ## The contract
 
@@ -83,6 +107,6 @@ by the `docs` gate — rather than living in the one place no gate can reach.
 gates run against: it computes the four DORA metrics and refuses to report a
 number it did not observe.
 
-## ## License
+## License
 
 Apache-2.0.

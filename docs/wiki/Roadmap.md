@@ -25,40 +25,29 @@ surface and a fault-coverage gap analysis as outstanding items. Both were done;
 here as pending for long enough that two documents in this directory disagreed
 about the state of the repository, which a reviewer noticed and no gate could.
 
-## The pipeline is not end-to-end yet
+## Completed delivery loop
 
-Everything below exists because the pipeline currently builds and gates and
-then stops. Nothing is deployed, so the loop this project is named for does not
-close.
+The consumer [dora-loop](https://github.com/jjackson0118/dora-loop) now builds,
+gates, deploys, smoke-checks, and records its own deployment events. The
+[deployment record](https://github.com/jjackson0118/dora-loop/wiki/Deployment)
+links the authenticated CI run and independent target, database, and report
+read-back. Replaying the recorded event returned `DUPLICATE` without adding a row.
 
-**2. Deploy, smoke and rollback stages.**
-Smoke verifies through the path a user takes, not a loopback port that returns
-200 while the product is unreachable. Rollback is prepared before the change,
-not improvised after it.
+Deployment scripts prepare recovery before activation and distinguish a smoke
+finding from missing evidence. A demonstrated smoke defect triggers guarded
+rollback; inconclusive smoke retains the release as `SUCCESS / UNVERIFIED` and
+fails the job. Outcome and verification are independent fields, so failure to
+measure is not invented as a failed rollout. Events carry the full commit range
+since the captured baseline, including merged branch commits.
 
-Rollback must branch on the smoke gate's *exit code* rather than on the CI
-step's status, because `ci/run-gate.sh` collapses exit 1 and exit 2 into one
-failure for the orchestrator — and "the smoke test found a broken deploy" and
-"the smoke test could not run" call for different responses. Exit 2 also has no
-honest `Outcome` to report to the consumer, which has to be settled rather than
-guessed.
-
-**3. The deploy job posts its own `DeploymentEvent`.**
-The loop closes: the pipeline becomes both the subject and the source of its
-own measurements. It must carry the full commit range rather than the head
-commit — see [ADR 0002](https://github.com/jjackson0118/dora-loop/blob/main/docs/adr/0002-lead-time-is-per-change.md)
-in the consumer repository, which is why the pipeline has to track the
-previously deployed SHA.
-
-**4. Review point — the deploy surface.**
-Required before merge. New: a running service, deploy credentials, a database.
-Every one of those is a way to be wrong at deploy time rather than in CI. The
-question that matters most is whether the deploy job can lie — whether a failed
-deploy can post `SUCCESS`, and whether anything at all would catch it.
+The deploy and reporting changes received independent reviews and isolated
+failure tests before merge. That proves the checked scenarios; the successful
+live run alone does not prove a live failure-and-recovery rehearsal. Consult the
+dated deployment record for the exact scope of operational evidence.
 
 ## Then
 
-**5. Dependency vulnerability gate.**
+**2. Dependency vulnerability gate.**
 Gate on the dependency *delta*, not the inventory — a gate that fails on
 day-one backlog is disabled within a week, and then it is decoration.
 Suppressions carry an owner and an expiry. The gate asserts it examined
