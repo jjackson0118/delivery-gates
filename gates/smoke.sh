@@ -55,6 +55,9 @@ EXPECT_SHA="${SMOKE_EXPECT_SHA:-}"
 # repository's central complaint, arrived at through its own new gate.
 [ -n "$BASE" ] || gate_not_applicable "SMOKE_URL is not set: nothing is deployed to smoke"
 BASE="${BASE%/}"
+# Each invocation owns its response file, including parallel smoke probes.
+BODY_FILE=$(mktemp)
+gate_cleanup "$BODY_FILE"
 
 checks=0
 report() { printf '   %s\n' "$1" >&2; }
@@ -79,8 +82,8 @@ ask() { # ask <path> ; echoes "<curl_rc> <http_code> <body>"
     # Caught by the fault sweep, not by reading: the comment said 1 and the code
     # did 2, and both were mine.
     rc=0
-    out=$(curl -sS -m "$TIMEOUT" -o /tmp/smoke.body -w '%{http_code}' "$BASE$path" 2>/dev/null) || rc=$?
-    printf '%s %s %s' "$rc" "${out:-000}" "$(head -c 400 /tmp/smoke.body 2>/dev/null || true)"
+    out=$(curl -sS -m "$TIMEOUT" -o "$BODY_FILE" -w '%{http_code}' "$BASE$path" 2>/dev/null) || rc=$?
+    printf '%s %s %s' "$rc" "${out:-000}" "$(head -c 400 "$BODY_FILE" 2>/dev/null || true)"
 }
 
 # --- 1. the service becomes ready, within a stated budget ------------------
@@ -158,7 +161,7 @@ else
     gate_note "report endpoint serves the signal contract"
 fi
 
-rm -f /tmp/smoke.body
+rm -f "$BODY_FILE"
 gate_note "performed $checks checks against $BASE"
 gate_scanned "$checks"
 gate_finish
