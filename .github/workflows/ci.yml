@@ -24,6 +24,9 @@ jobs:
       - name: Gate -- shellcheck
         run: ./ci/run-gate.sh ./gates/shellcheck.sh .
 
+      - name: Exercise real smoke gate against local HTTP fixtures
+        run: python3 -m unittest discover -s tests -p "*_test.py"
+
       - name: Gate -- docs
         run: ./ci/run-gate.sh ./gates/docs.sh .
 
