@@ -8,3 +8,7 @@
 # harness reported 22 proven where it reports 26. Machine state does not belong
 # in a source tree, and a scratch directory does not belong in git.
 backups/
+
+# Fleet addresses for tools/vm-boundary-probe.sh. Public repository; the probe
+# reads them from here so they are never committed.
+.vm-boundary-targets
