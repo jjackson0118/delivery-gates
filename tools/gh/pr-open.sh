@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pr-open.sh <repo> <branch> -- opens a PR titled after the branch's FIRST
+# pr-open.sh <repo> <branch> [checkout] -- opens a PR titled after the branch's FIRST
 # commit, with every commit message in the body, plus a footer recording what
 # actually opened it.
 set -euo pipefail
@@ -7,11 +7,35 @@ DIR="$(CDPATH='' cd -P -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.sh
 source "$DIR/lib.sh"
 
-repo="${1:?usage: pr-open.sh <repo> <branch>}"
-branch="${2:?usage: pr-open.sh <repo> <branch>}"
+repo="${1:?usage: pr-open.sh <repo> <branch> [checkout]}"
+branch="${2:?usage: pr-open.sh <repo> <branch> [checkout]}"
 gh_check_repo "$repo"
 
-tree="/mnt/raid1/$repo"
+tree=$(git -C "${3:-.}" rev-parse --show-toplevel 2>/dev/null) \
+    || { printf 'ERROR: checkout must be a Git working tree\n' >&2; exit 2; }
+remote=$(git -C "$tree" remote get-url origin) \
+    || { printf 'ERROR: checkout has no origin\n' >&2; exit 2; }
+# Check the destination before fetching or constructing a PR. SSH aliases are
+# supported only when their effective HostName resolves to github.com locally.
+case "$remote" in
+    https://github.com/*) remote_path=${remote#https://github.com/} ;;
+    *)
+        if [[ "$remote" =~ ^ssh://([^/@]+@)?([^/:]+)/(.*)$ ]]; then
+            ssh_host="${BASH_REMATCH[2]}"; remote_path="${BASH_REMATCH[3]}"
+        elif [[ "$remote" =~ ^([^/@:]+@)?([^/:]+):(.*)$ ]]; then
+            ssh_host="${BASH_REMATCH[2]}"; remote_path="${BASH_REMATCH[3]}"
+        else
+            printf 'ERROR: origin must identify the requested GitHub repository\n' >&2; exit 2
+        fi
+        effective_host=$(ssh -G -- "$ssh_host" 2>/dev/null | awk '$1 == "hostname" { print $2 }')
+        [ "$effective_host" = github.com ] \
+            || { printf 'ERROR: origin SSH host is not github.com\n' >&2; exit 2; }
+        ;;
+esac
+remote_path=${remote_path%.git}
+[ "$remote_path" = "$GH_OWNER/$repo" ] \
+    || { printf 'ERROR: origin does not match the requested owner/repository\n' >&2; exit 2; }
+
 # Title from the FIRST commit on the branch, body from all of them.
 #
 # Both used to read the branch tip with -1, which is the least representative
@@ -68,13 +92,8 @@ else
     done
 fi
 
-# Says what is true rather than what sounds reassuring. An earlier version of
-# this footer said "required checks are enforced identically either way -- the
-# ruleset bypass list is empty", which is true and worthless: the bypass list
-# is empty AND the ruleset requires zero approvals, so nothing human stood
-# between this branch and main. That sentence is in the permanent record of six
-# merged pull requests, which is why this one is explicit.
-footer=$'\n\n---\n\n_Opened and merged by automation on `testbed1`, authenticated by a fine-grained PAT owned by @jjackson0118 — so git records a human author where there was none. **Zero human approval is required to merge here** (`required_approving_review_count: 0`); the required status checks are the only thing standing in the way, and they are enforced on this token like anyone else (the ruleset bypass list is empty and the token holds no Administration permission)._'
+# This helper opens a PR; merge policy belongs to the repository configuration.
+footer=$'\n\n---\n\n_Opened by automation using the configured GitHub credential; see repository review documentation for merge policy._'
 
 # GitHub rejects a body over 65536 characters with a 422. Truncating with a
 # visible marker beats losing the pull request, and the commits are still in

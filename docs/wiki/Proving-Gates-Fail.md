@@ -1,5 +1,11 @@
 # Proving the gates fail
 
+The command below executes repository code, including fixture builds and fault
+injectors. Use a disposable environment without host credentials or unrelated
+services, not a privileged account on a shared host. Scratch clones isolate
+files; they do not sandbox execution. See [Using it](Using-It.md) for the
+separately reproduced local static checks and prerequisites.
+
 ```
 $ ./prove-gates-fail.sh ../dora-loop .
   fixture dora-loop        <sha>
