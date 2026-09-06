@@ -85,8 +85,8 @@ jobs:
       - name: Prove
         # Two fixtures. This repository is one of them: the docs gate's
         # structural sections need a gates/ directory to execute at all, so
-        # against dora-loop alone they were dead code in every proof -- 1 claim
-        # checked where this yields 27. A coverage analysis deleted all four
+        # against dora-loop alone they were dead code in every proof. A
+        # coverage analysis deleted all four
         # sections and the corpus stayed green.
         working-directory: delivery-gates
         run: ./prove-gates-fail.sh ../dora-loop .

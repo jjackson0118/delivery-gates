@@ -95,7 +95,7 @@ $ ./prove-gates-fail.sh ../dora-loop .
   OK    _control-noop      caught by secrets (exit 0)
   OK    docs-broken-citation caught by docs (exit 1, rule citation-missing-file)
   OK    gate-crashes-midway caught by gradle-wrapper (exit 2)
-  OK    secrets-aws-key    caught by secrets (exit 1, rule generic-api-key)
+  OK    secrets-aws-key    caught by secrets (exit 1, rule aws-access-token)
   OK    secrets-private-key caught by secrets (exit 1, rule private-key)
   OK    secrets-suppressed-by-ignorefile caught by secrets (exit 1, rule private-key)
   OK    _selftest-phantom  harness correctly reported NOT CAUGHT for an uninjected fault
@@ -133,20 +133,36 @@ discriminate. Only the pair shows it is measuring something.
 
 Faults assert an **exact** exit code and, where applicable, the **exact rule
 id** that must appear in the report. That second assertion is not pedantry.
-The `secrets-aws-key` fault originally expected a rule named
-`aws-access-token`; the gate returned exit 1, so an exit-code-only check would
-have passed — but the rule that actually fired was `generic-api-key`, because
-gitleaks 8.30.1 ships no AWS-specific rule that matches a bare `AKIA`
-identifier. The expected rule had been written from memory rather than from
-observation. Right answer, wrong reason, and only the rule assertion caught it.
+The `secrets-aws-key` fault has been wrong twice, in opposite directions, and
+both were caught only by asserting the rule.
+
+First it expected `aws-access-token` written from memory; the gate returned
+exit 1, so an exit-code-only check passed, while the rule that fired was
+`generic-api-key`. The correction then overshot into a second false claim —
+that gitleaks 8.30.1 ships no AWS rule matching a bare `AKIA` identifier. It
+does. It applies an entropy test to the identifier, so a *randomly generated*
+one triggers it only sometimes: over 30 runs of the injector,
+`aws-access-token` fired 3 times and `generic-api-key` all 30. Those are not
+alternatives — the generic rule fires on every run, including the three.
+
+So the fault was nondeterministic, and a fresh clone once reported
+`26 proven, 1 mismatched` against the working tree's 27 and 0. The identifier
+is fixed now and the rule is `aws-access-token` every time. A fault whose job
+is to assert the rule cannot have a rule that depends on the draw.
 
 ### Declared denominators
 
 The harness takes more than one fixture, and needs to. `dora-loop` has no
 `gates/` directory, so the docs gate's structural sections never executed
-against it — 1 claim checked where this repository yields 27. A coverage
+against it — 5 claims checked there where this repository yields 28. A coverage
 analysis deleted all four sections and the corpus stayed green. Running the
-gates against this repository as well catches it: `docs scanned 3, floor is 20`.
+gates against this repository as well catches it: with those sections removed
+this repository reports `docs scanned 4` against a floor of 20.
+
+(Those three numbers were 1, 27 and 3 until a reviewer measured them. They are
+denominators, and a denominator written from memory is the thing this file is
+about. They were also copied into four other places, which is why the figure
+now appears once.)
 
 `fixtures/<name>.floors` records the minimum each gate must report against a
 fixture, and the harness fails when one drops below it. A gate with no entry is

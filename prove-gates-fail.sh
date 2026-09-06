@@ -36,9 +36,11 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 #
 # One fixture was not enough, and the gap was measurable rather than
 # theoretical. dora-loop has no gates/ directory, so the docs gate's structural
-# sections never ran against it -- 1 claim checked where this repository yields
-# 26. A coverage analysis deleted those four sections outright and the corpus
-# stayed green.
+# sections never ran against it, so a coverage analysis deleted those four
+# sections outright and the corpus stayed green. The exact denominators are in
+# README.md's "Declared denominators" section and are deliberately not repeated
+# here -- this figure was copied into four files and had drifted to three
+# different values by the time a reviewer counted.
 DIRTY=0
 _args=()
 for _a in "$@"; do
