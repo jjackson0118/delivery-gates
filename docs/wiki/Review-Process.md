@@ -1,5 +1,18 @@
 # Review process
 
+One maintainer, AI-assisted, no second human — so the review process is written
+down rather than assumed. This page covers the adversarial pass required before
+any change to the contract library, and five checklist rules, each earned by a
+specific failure in this repository's history.
+
+It also states which parts are enforced by a gate and which are only habit,
+because a checklist presented as a control is the same category of error as a
+green result standing in for a measurement.
+
+What is left to build, in order and with the reasoning, is on the
+[Roadmap](Roadmap.md). Review points are items in that list rather than
+something remembered at the end.
+
 This repository is maintained by one person working with AI assistance. There
 is no second human, so "get a review" cannot mean what it means on a team. What
 follows is what replaces it, and an honest account of why each part exists.
