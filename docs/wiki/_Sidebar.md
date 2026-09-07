@@ -6,6 +6,7 @@
 - [Using it](Using-It.md)
 - [The gates](The-Gates.md)
 - [Review process](Review-Process.md)
+- [How it was built](How-It-Was-Built.md)
 - [Roadmap](Roadmap.md)
 
 ---

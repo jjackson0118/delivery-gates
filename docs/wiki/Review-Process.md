@@ -13,7 +13,8 @@ What is left to build, in order and with the reasoning, is on the
 [Roadmap](Roadmap.md). Review points are items in that list rather than
 something remembered at the end.
 
-This repository is maintained by one person working with AI assistance. There
+This repository is maintained by one person working with AI assistance — the
+account of which agents did what is on [How it was built](How-It-Was-Built.md). There
 is no second human, so "get a review" cannot mean what it means on a team. What
 follows is what replaces it, and an honest account of why each part exists.
 
