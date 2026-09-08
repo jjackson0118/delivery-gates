@@ -1,9 +1,14 @@
 # How it was built
 
 This repository and [dora-loop](https://github.com/jjackson0118/dora-loop) were
-built in about two days, from 4 to 6 September 2026, by one person directing AI
-coding agents. That is not a disclosure buried at the bottom; it is half of what
-the two repositories are for. The other half is the delivery loop they
+built over one weekend by one person directing AI coding agents: the first
+commit landed on Friday 4 September 2026 at 16:11, the last build commit on
+Sunday 6 September at 15:27. Monday 7 September was a review pass, branch
+cleanup, and this documentation — so the contribution graph shows four days,
+and "two days" below means the build.
+
+That it was built this way is not a disclosure buried at the bottom; it is half
+of what the two repositories are for. The other half is the delivery loop they
 implement. This page is the account of the first half.
 
 ## Who did what
@@ -137,7 +142,9 @@ implementation started rather than left for the models to make.
 
 ## What it cost
 
-Two days of one person's attention, one Anthropic subscription to its usage
-cap, and the remainder on an OpenAI subscription. The git history records 28
-commits on `main` here and 34 in dora-loop over that period. No line count is
+About two days of one person's attention for the build (Friday afternoon to
+Sunday afternoon), plus most of the Monday for review and documentation. One
+Anthropic subscription to its usage cap, and the remainder on an OpenAI
+subscription. The git history records 28 commits on `main` here and 34 in
+dora-loop for the build, and a handful more on the Monday. No line count is
 claimed as a measure of anything.
