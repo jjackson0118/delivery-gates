@@ -39,7 +39,7 @@ harness — so the proof exercises the real gate rather than a copy of it.
   that motivated it.
 - **[Review process](Review-Process.md)** — one maintainer, no second human,
   and what stands in for one. Honest about what it does not cover.
-- **[How it was built](How-It-Was-Built.md)** — two days, one person, two AI
+- **[How it was built](How-It-Was-Built.md)** — one weekend, one person, two AI
   agents; who did what, what the review loop caught, and why every comment
   was left in.
 - **[Roadmap](Roadmap.md)** — what is left, in order, and what was cut.

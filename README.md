@@ -6,7 +6,8 @@ that proves each one fires.
 ## How this was built
 
 This repository and [dora-loop](https://github.com/jjackson0118/dora-loop) were
-built in two days by one person directing AI coding agents — Claude Opus 5 for
+built over one weekend (4–6 September 2026, with review and documentation on
+the 7th) by one person directing AI coding agents — Claude Opus 5 for
 roughly 80% of the work, Codex (GPT-6 Astra) for the remainder — and that is
 half of what they are meant to show. The maintainer set the objective, scope,
 references, and acceptance criteria, and decided what counted as done; the
@@ -121,7 +122,7 @@ by the `docs` gate — rather than living in the one place no gate can reach.
 | [Using it](https://github.com/jjackson0118/delivery-gates/wiki/Using-It) | Calling the reusable workflow, and declaring your floors. |
 | [The gates](https://github.com/jjackson0118/delivery-gates/wiki/The-Gates) | What each gate checks, and the failure that motivated it. |
 | [Review process](https://github.com/jjackson0118/delivery-gates/wiki/Review-Process) | One maintainer, no second human, and what replaces one. |
-| [How it was built](https://github.com/jjackson0118/delivery-gates/wiki/How-It-Was-Built) | Two days, one person, two AI agents — and why every comment stayed. |
+| [How it was built](https://github.com/jjackson0118/delivery-gates/wiki/How-It-Was-Built) | One weekend, one person, two AI agents — and why every comment stayed. |
 | [Roadmap](https://github.com/jjackson0118/delivery-gates/wiki/Roadmap) | What is left, in order — and what was cut, and why. |
 
 [`dora-loop`](https://github.com/jjackson0118/dora-loop) is the service these
